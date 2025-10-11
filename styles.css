@@ -1,0 +1,387 @@
+:root {
+  color-scheme: light;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-bg: #f6f8fb;
+  --color-surface: #ffffff;
+  --color-border: #d9dee8;
+  --color-primary: #276ef1;
+  --color-text: #1b2430;
+  --color-muted: #5b6573;
+  --radius-lg: 20px;
+  --radius-md: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+a {
+  color: inherit;
+}
+
+.hero {
+  background: linear-gradient(135deg, #1b48ff 0%, #6b7bff 100%);
+  color: white;
+  padding: 64px 24px 80px;
+  text-align: center;
+}
+
+.hero__content {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.hero h1 {
+  font-size: clamp(2.2rem, 3vw + 1rem, 3.5rem);
+  margin-bottom: 16px;
+}
+
+.hero p {
+  font-size: clamp(1rem, 1vw + 0.5rem, 1.35rem);
+  margin: 0;
+  line-height: 1.7;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 32px;
+  max-width: 1200px;
+  margin: -56px auto 64px;
+  padding: 0 24px;
+}
+
+.controls,
+.preview {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  padding: 32px;
+  box-shadow: 0 16px 40px -32px rgba(27, 41, 89, 0.4);
+}
+
+.controls h2,
+.preview h2 {
+  margin-top: 0;
+  font-size: 1.4rem;
+}
+
+form {
+  display: grid;
+  gap: 16px;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-row label {
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: 12px 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: rgba(39, 110, 241, 0.75);
+  box-shadow: 0 0 0 4px rgba(39, 110, 241, 0.15);
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form-row--inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 24px;
+}
+
+.checkbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  color: var(--color-muted);
+}
+
+.checkbox input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  background: #eef1f8;
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px -12px rgba(27, 36, 48, 0.6);
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.label-list {
+  margin-top: 24px;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.label-list__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: #f8f9fb;
+  border: 1px solid rgba(39, 110, 241, 0.08);
+}
+
+.label-list__item strong {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.label-list__meta {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.label-list__remove {
+  background: none;
+  color: #d94a5b;
+}
+
+.preview__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.preview__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.preview__hint {
+  margin: 0 0 24px;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.label-preview {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 420px;
+  padding: 24px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+}
+
+.label-preview__grid {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+}
+
+.label-preview__grid[data-columns="1"] {
+  grid-template-columns: repeat(1, 1fr);
+}
+
+.label-preview__grid[data-columns="2"] {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.label-preview__grid[data-columns="3"] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.label-preview__grid[data-columns="4"] {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.label-preview__empty {
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.label-card {
+  border: 1px solid rgba(27, 36, 48, 0.12);
+  border-radius: 12px;
+  background: #fafbff;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 160px;
+}
+
+.label-card__name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-align: center;
+  line-height: 1.4;
+  color: var(--color-text);
+}
+
+.print-sheet {
+  display: grid;
+  gap: 0;
+}
+
+.print-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 6mm;
+  border: 1px dashed transparent;
+}
+
+.print-label__name {
+  font-weight: 600;
+  margin-bottom: 3mm;
+  text-align: center;
+}
+
+.print-label__barcode svg {
+  width: 100%;
+  height: auto;
+}
+
+.footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 1040px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  .preview__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .preview__actions {
+    width: 100%;
+  }
+
+  .preview__actions .btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .grid--3 {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row--inline {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero {
+    padding: 48px 18px 72px;
+  }
+
+  .app {
+    margin-top: -40px;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .hero,
+  .controls,
+  .preview__header,
+  .preview__hint,
+  .footer,
+  .btn,
+  .label-list {
+    display: none !important;
+  }
+
+  .app {
+    display: block;
+    margin: 0;
+    padding: 0;
+  }
+
+  .preview {
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .label-preview {
+    border: none;
+    padding: 0;
+  }
+}
