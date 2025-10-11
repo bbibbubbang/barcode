@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>바코드 라벨 생성기</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js" defer></script>
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero__content">
+        <h1>웹 바코드 라벨 생성 &amp; 출력</h1>
+        <p>
+          상품 정보를 입력하고 원하는 수량으로 바코드 라벨을 만들어 바로
+          출력해 보세요. 복잡한 프로그램 설치 없이 브라우저만으로 빠르게
+          인쇄할 수 있습니다.
+        </p>
+      </div>
+    </header>
+
+    <main class="app">
+      <section class="controls">
+        <h2>라벨 정보 입력</h2>
+        <form id="label-form">
+          <div class="form-row">
+            <label for="product-name">상품명</label>
+            <input
+              id="product-name"
+              name="productName"
+              type="text"
+              placeholder="예: 프리미엄 원두커피"
+              required
+            />
+          </div>
+          <div class="form-row">
+            <label for="barcode-value">바코드 값</label>
+            <input
+              id="barcode-value"
+              name="barcodeValue"
+              type="text"
+              placeholder="예: 8801234567890"
+              required
+            />
+          </div>
+          <div class="grid grid--3">
+            <div class="form-row">
+              <label for="quantity">수량</label>
+              <input
+                id="quantity"
+                name="quantity"
+                type="number"
+                min="1"
+                max="200"
+                value="10"
+                required
+              />
+            </div>
+            <div class="form-row">
+              <label for="barcode-type">바코드 유형</label>
+              <select id="barcode-type" name="barcodeType">
+                <option value="code128">Code 128 (일반)</option>
+                <option value="ean13">EAN-13</option>
+                <option value="code39">Code 39</option>
+                <option value="itf14">ITF-14</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="font-size">글자 크기</label>
+              <input
+                id="font-size"
+                name="fontSize"
+                type="number"
+                min="10"
+                max="24"
+                value="14"
+              />
+            </div>
+          </div>
+          <div class="grid grid--3">
+            <div class="form-row">
+              <label for="label-width">라벨 가로 (mm)</label>
+              <input
+                id="label-width"
+                name="labelWidth"
+                type="number"
+                min="30"
+                max="100"
+                value="60"
+              />
+            </div>
+            <div class="form-row">
+              <label for="label-height">라벨 세로 (mm)</label>
+              <input
+                id="label-height"
+                name="labelHeight"
+                type="number"
+                min="20"
+                max="60"
+                value="40"
+              />
+            </div>
+            <div class="form-row">
+              <label for="columns">열 개수</label>
+              <input
+                id="columns"
+                name="columns"
+                type="number"
+                min="1"
+                max="4"
+                value="3"
+              />
+            </div>
+          </div>
+          <div class="form-row form-row--inline">
+            <label class="checkbox">
+              <input type="checkbox" id="show-text" name="showText" checked />
+              <span>바코드 아래 값 표시</span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" id="include-name" name="includeName" checked />
+              <span>상품명 표시</span>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary">라벨 추가</button>
+            <button type="button" id="reset-button" class="btn">전체 삭제</button>
+          </div>
+        </form>
+
+        <div class="label-list" id="label-list" aria-live="polite"></div>
+      </section>
+
+      <section class="preview">
+        <div class="preview__header">
+          <h2>프린트 미리보기</h2>
+          <div class="preview__actions">
+            <button id="generate-button" class="btn">미리보기 업데이트</button>
+            <button id="print-button" class="btn btn--primary">바로 인쇄</button>
+          </div>
+        </div>
+        <p class="preview__hint">
+          라벨은 인쇄 시에도 동일한 형태로 출력됩니다. 페이지 여백을 0으로
+          설정하면 라벨지가 더 정확하게 맞춰집니다.
+        </p>
+        <div id="label-preview" class="label-preview"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        © 2024 Barcode Maker. 라벨 템플릿을 저장하거나 즐겨찾기에 추가해 두면
+        다음에도 쉽게 사용할 수 있습니다.
+      </p>
+    </footer>
+  </body>
+</html>
