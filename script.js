@@ -19,6 +19,73 @@ const state = {
 
 let isResettingForm = false;
 
+const MM_TO_PX = 96 / 25.4;
+const PREVIEW_PADDING_MM = 10;
+const PREVIEW_GROUP_GAP_MM = 6;
+
+function mmToPx(mm) {
+  return mm * MM_TO_PX;
+}
+
+function getJsBarcode() {
+  if (typeof globalThis === 'undefined') return null;
+  const library = globalThis.JsBarcode;
+  return typeof library === 'function' ? library : null;
+}
+
+function renderBarcode(svg, value, options) {
+  const JsBarcodeLibrary = getJsBarcode();
+  if (!JsBarcodeLibrary) {
+    return false;
+  }
+
+  try {
+    JsBarcodeLibrary(svg, value, options);
+    return true;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('바코드 생성 중 오류가 발생했습니다.', error);
+    return false;
+  }
+}
+
+function generateId() {
+  if (typeof globalThis !== 'undefined') {
+    const { crypto: globalCrypto } = globalThis;
+    if (globalCrypto) {
+      if (typeof globalCrypto.randomUUID === 'function') {
+        return globalCrypto.randomUUID();
+      }
+
+      if (typeof globalCrypto.getRandomValues === 'function') {
+        const bytes = globalCrypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+        const segments = [
+          bytes.subarray(0, 4),
+          bytes.subarray(4, 6),
+          bytes.subarray(6, 8),
+          bytes.subarray(8, 10),
+          bytes.subarray(10, 16),
+        ];
+
+        const hex = segments
+          .map((segment) =>
+            Array.from(segment)
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join(''),
+          )
+          .join('-');
+
+        return hex;
+      }
+    }
+  }
+
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function getFormValues() {
   const formData = new FormData(form);
 
@@ -166,7 +233,7 @@ function restoreLabels() {
 
           return {
             ...sanitized,
-            id: item.id || crypto.randomUUID(),
+            id: typeof item.id === 'string' && item.id ? item.id : generateId(),
           };
         });
       persistLabels();
@@ -320,7 +387,7 @@ function handleFormSubmit(event) {
   }
 
   const label = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     ...formValues,
   };
 
@@ -370,11 +437,64 @@ function getPreviewLabels() {
   return labels;
 }
 
-function renderDraftBadge(card) {
-  const badge = document.createElement('span');
-  badge.className = 'label-card__badge';
-  badge.textContent = '작성 중';
-  card.appendChild(badge);
+function createPreviewLabel(label) {
+  const element = document.createElement('div');
+  element.className = 'preview-label';
+
+  const basePaddingPx = mmToPx(3);
+  const horizontalPaddingPx = basePaddingPx + label.horizontalOffset;
+  const verticalGapPx = Math.max(0, mmToPx(2.4) - label.verticalOffset);
+  const nameMarginPx = Math.max(0, mmToPx(2) - label.verticalOffset);
+
+  element.style.width = `${mmToPx(label.labelWidth)}px`;
+  element.style.height = `${mmToPx(label.labelHeight)}px`;
+  element.style.padding = `${basePaddingPx}px`;
+  element.style.paddingLeft = `${horizontalPaddingPx}px`;
+  element.style.paddingRight = `${horizontalPaddingPx}px`;
+  element.style.gap = `${verticalGapPx}px`;
+
+  if (label.includeName) {
+    const name = document.createElement('div');
+    name.className = 'preview-label__name';
+    name.style.fontSize = `${label.productFontSize}px`;
+    name.style.marginBottom = `${nameMarginPx}px`;
+    name.textContent = label.productName;
+    element.appendChild(name);
+
+    if (label.subProductName) {
+      const subName = document.createElement('div');
+      subName.className = 'preview-label__subname';
+      subName.style.fontSize = `${label.subProductFontSize}px`;
+      subName.style.marginBottom = `${nameMarginPx}px`;
+      subName.textContent = label.subProductName;
+      element.appendChild(subName);
+    }
+  }
+
+  const barcodeWrapper = document.createElement('div');
+  barcodeWrapper.className = 'preview-label__barcode';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  barcodeWrapper.appendChild(svg);
+  element.appendChild(barcodeWrapper);
+
+  if (label.barcodeValue) {
+    const rendered = renderBarcode(svg, label.barcodeValue, {
+      format: mapBarcodeType(label.barcodeType),
+      displayValue: label.showText,
+      fontSize: label.barcodeFontSize,
+      height: label.labelHeight * 2.2,
+      margin: 0,
+    });
+
+    if (!rendered) {
+      barcodeWrapper.innerHTML = `<p class="label-preview__empty">바코드 스크립트를 불러오지 못했습니다.<br />인터넷 연결을 확인하거나 새로고침 후 다시 시도해주세요.</p>`;
+    }
+  } else {
+    barcodeWrapper.innerHTML =
+      '<p class="label-preview__empty">바코드 값을 입력하면 미리보기를 확인할 수 있습니다.</p>';
+  }
+
+  return element;
 }
 
 function renderPreview() {
@@ -391,77 +511,51 @@ function renderPreview() {
     return;
   }
 
-  const page = document.createElement('div');
-  page.className = 'preview__page';
+  const sheet = document.createElement('div');
+  sheet.className = 'preview__sheet';
+  sheet.style.padding = `${mmToPx(PREVIEW_PADDING_MM)}px`;
 
-  const grid = document.createElement('div');
-  grid.className = 'label-preview__grid';
-  const columnCounts = previewLabels.map((label) => calculateAutoColumns(label.labelWidth));
-  grid.dataset.columns = Math.max(1, ...columnCounts).toString();
+  let maxContentWidthMm = 0;
+  let totalContentHeightMm = 0;
 
-  previewLabels.forEach((label) => {
-    const card = document.createElement('div');
-    card.className = 'label-card';
-    card.style.minHeight = `${label.labelHeight * 2.5}px`;
-    card.style.setProperty('--horizontal-offset', `${label.horizontalOffset}px`);
-    card.style.setProperty('--vertical-offset', `${label.verticalOffset}px`);
+  previewLabels.forEach((label, index) => {
+    const columns = calculateAutoColumns(label.labelWidth);
+    const rows = Math.max(1, Math.ceil(label.quantity / columns));
+    const groupWidthMm = columns * label.labelWidth;
+    const groupHeightMm = rows * label.labelHeight;
 
-    if (label.isDraft) {
-      card.classList.add('label-card--draft');
-      renderDraftBadge(card);
+    maxContentWidthMm = Math.max(maxContentWidthMm, groupWidthMm);
+    totalContentHeightMm += groupHeightMm;
+    if (index < previewLabels.length - 1) {
+      totalContentHeightMm += PREVIEW_GROUP_GAP_MM;
     }
 
-    if (label.includeName) {
-      const name = document.createElement('div');
-      name.className = 'label-card__name';
-      name.style.fontSize = `${label.productFontSize}px`;
-      name.textContent = label.productName;
-      card.appendChild(name);
+    const group = document.createElement('div');
+    group.className = 'preview__group';
+    group.style.gridTemplateColumns = `repeat(${columns}, ${mmToPx(label.labelWidth)}px)`;
+    group.style.columnGap = '0px';
+    group.style.rowGap = '0px';
 
-      if (label.subProductName) {
-        const subName = document.createElement('div');
-        subName.className = 'label-card__subname';
-        subName.style.fontSize = `${label.subProductFontSize}px`;
-        subName.textContent = label.subProductName;
-        card.appendChild(subName);
-      }
+    for (let i = 0; i < label.quantity; i += 1) {
+      const previewLabel = createPreviewLabel(label);
+      group.appendChild(previewLabel);
     }
 
-    const barcodeContainer = document.createElement('div');
-    barcodeContainer.className = 'label-card__barcode';
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    barcodeContainer.appendChild(svg);
-    card.appendChild(barcodeContainer);
-
-    if (label.barcodeValue) {
-      try {
-        JsBarcode(svg, label.barcodeValue, {
-          format: mapBarcodeType(label.barcodeType),
-          height: label.labelHeight * 1.6,
-          width: 2,
-          displayValue: label.showText,
-          fontSize: label.barcodeFontSize,
-          margin: 4,
-        });
-      } catch (error) {
-        barcodeContainer.innerHTML = `<p class="label-preview__empty">바코드 생성에 실패했습니다.<br />입력 값을 확인해주세요.</p>`;
-      }
-    } else {
-      barcodeContainer.innerHTML =
-        '<p class="label-preview__empty">바코드 값을 입력하면 미리보기를 확인할 수 있습니다.</p>';
-    }
-
-    const meta = document.createElement('div');
-    meta.className = 'label-list__meta';
-    const metaInfo = [`${label.quantity}매 출력`, `${label.labelWidth} × ${label.labelHeight}mm`];
-    meta.innerHTML = metaInfo.map((text) => `<span>${text}</span>`).join('');
-    card.appendChild(meta);
-
-    grid.appendChild(card);
+    sheet.appendChild(group);
   });
 
-  page.appendChild(grid);
-  previewContainer.appendChild(page);
+  const totalWidthMm = maxContentWidthMm + PREVIEW_PADDING_MM * 2;
+  const totalHeightMm = totalContentHeightMm + PREVIEW_PADDING_MM * 2;
+
+  const sheetWidthPx = mmToPx(totalWidthMm);
+  const sheetHeightPx = mmToPx(totalHeightMm);
+
+  sheet.style.width = `${sheetWidthPx}px`;
+  sheet.style.minWidth = `${sheetWidthPx}px`;
+  sheet.style.minHeight = `${sheetHeightPx}px`;
+  sheet.style.gap = `${mmToPx(PREVIEW_GROUP_GAP_MM)}px`;
+
+  previewContainer.appendChild(sheet);
 }
 
 function mapBarcodeType(type) {
@@ -519,15 +613,15 @@ function buildPrintSheet(labels) {
       barcodeWrapper.appendChild(svg);
       item.appendChild(barcodeWrapper);
 
-      try {
-        JsBarcode(svg, label.barcodeValue, {
-          format: mapBarcodeType(label.barcodeType),
-          displayValue: label.showText,
-          fontSize: label.barcodeFontSize,
-          height: label.labelHeight * 2.2,
-          margin: 0,
-        });
-      } catch (error) {
+      const rendered = renderBarcode(svg, label.barcodeValue, {
+        format: mapBarcodeType(label.barcodeType),
+        displayValue: label.showText,
+        fontSize: label.barcodeFontSize,
+        height: label.labelHeight * 2.2,
+        margin: 0,
+      });
+
+      if (!rendered) {
         barcodeWrapper.innerHTML = '<p>바코드 생성 오류</p>';
       }
 
