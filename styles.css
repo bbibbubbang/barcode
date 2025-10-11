@@ -288,19 +288,35 @@ textarea:focus {
 }
 
 .label-preview {
-  border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
   min-height: 420px;
-  padding: 24px;
-  background: #fff;
+  padding: 32px;
+  background: #e9edf4;
   display: grid;
   place-items: center;
 }
 
+.preview__page {
+  width: min(100%, 720px);
+  aspect-ratio: 210 / 297;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 1px rgba(27, 36, 48, 0.12),
+    0 24px 48px rgba(27, 36, 48, 0.18);
+  padding: 24px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .label-preview__grid {
   width: 100%;
+  height: 100%;
   display: grid;
   gap: 12px;
+  align-content: start;
+  overflow-y: auto;
 }
 
 .label-preview__grid[data-columns="1"] {
@@ -325,14 +341,18 @@ textarea:focus {
 }
 
 .label-card {
+  --horizontal-offset: 0px;
+  --vertical-offset: 0px;
   border: 1px solid rgba(27, 36, 48, 0.12);
   border-radius: 12px;
   background: #fafbff;
   padding: 12px;
+  padding-left: calc(12px + var(--horizontal-offset));
+  padding-right: calc(12px + var(--horizontal-offset));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: max(0px, calc(8px - var(--vertical-offset)));
   min-height: 160px;
 }
 
@@ -366,7 +386,11 @@ textarea:focus {
   text-align: center;
   line-height: 1.4;
   white-space: pre-line;
-  margin-top: -4px;
+  margin-top: calc(-4px - var(--vertical-offset));
+}
+
+.label-card__barcode {
+  width: 100%;
 }
 
 #print-root {
@@ -385,17 +409,23 @@ textarea:focus {
 }
 
 .print-label {
+  --horizontal-offset: 0px;
+  --vertical-offset: 0px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: max(0px, calc(2.4mm - var(--vertical-offset)));
   padding: 3mm;
+  padding-left: calc(3mm + var(--horizontal-offset));
+  padding-right: calc(3mm + var(--horizontal-offset));
   border: 1px dashed transparent;
+  box-sizing: border-box;
 }
 
 .print-label__name {
   font-weight: 600;
-  margin-bottom: 2mm;
+  margin-bottom: calc(2mm - var(--vertical-offset));
   text-align: center;
   white-space: pre-line;
 }
@@ -403,9 +433,13 @@ textarea:focus {
 .print-label__subname {
   font-size: 0.85rem;
   color: #444b55;
-  margin-bottom: 2mm;
+  margin-bottom: calc(2mm - var(--vertical-offset));
   text-align: center;
   white-space: pre-line;
+}
+
+.print-label__barcode {
+  width: 100%;
 }
 
 .print-label__barcode svg {

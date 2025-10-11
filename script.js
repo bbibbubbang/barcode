@@ -10,6 +10,8 @@ const STORAGE_KEYS = {
   form: 'barcode-maker:form',
 };
 
+const MAX_HORIZONTAL_OFFSET = 60;
+
 const state = {
   labels: [],
   draft: null,
@@ -33,6 +35,8 @@ function getFormValues() {
     labelHeight: Number(formData.get('labelHeight')),
     showText: formData.get('showText') === 'on',
     includeName: formData.get('includeName') === 'on',
+    horizontalOffset: Number(formData.get('horizontalOffset')),
+    verticalOffset: Number(formData.get('verticalOffset')),
   };
 }
 
@@ -63,6 +67,8 @@ function getDefaults() {
     barcodeFontSize: Number(form.elements.barcodeFontSize?.defaultValue) || 12,
     labelWidth: Number(form.elements.labelWidth?.defaultValue) || 60,
     labelHeight: Number(form.elements.labelHeight?.defaultValue) || 40,
+    horizontalOffset: Number(form.elements.horizontalOffset?.defaultValue) || 0,
+    verticalOffset: Number(form.elements.verticalOffset?.defaultValue) || 0,
   };
 }
 
@@ -100,6 +106,15 @@ function withFallbacks(values) {
       min: 20,
       max: 60,
       fallback: defaults.labelHeight,
+    }),
+    horizontalOffset: normalizeNumber(values.horizontalOffset, {
+      min: 0,
+      max: MAX_HORIZONTAL_OFFSET,
+      fallback: defaults.horizontalOffset,
+    }),
+    verticalOffset: normalizeNumber(values.verticalOffset, {
+      min: 0,
+      fallback: defaults.verticalOffset,
     }),
   };
 }
@@ -145,6 +160,8 @@ function restoreLabels() {
             barcodeFontSize: Number(item.barcodeFontSize),
             labelWidth: Number(item.labelWidth),
             labelHeight: Number(item.labelHeight),
+            horizontalOffset: Number(item.horizontalOffset),
+            verticalOffset: Number(item.verticalOffset),
           });
 
           return {
@@ -195,6 +212,12 @@ function restoreFormState() {
     }
     if (typeof parsed.labelHeight === 'number') {
       form.elements.labelHeight.value = parsed.labelHeight;
+    }
+    if (typeof parsed.horizontalOffset === 'number') {
+      form.elements.horizontalOffset.value = parsed.horizontalOffset;
+    }
+    if (typeof parsed.verticalOffset === 'number') {
+      form.elements.verticalOffset.value = parsed.verticalOffset;
     }
     if (typeof parsed.barcodeType === 'string') {
       form.elements.barcodeType.value = parsed.barcodeType;
@@ -285,7 +308,16 @@ function renderLabelList() {
 
 function handleFormSubmit(event) {
   event.preventDefault();
-  const formValues = withFallbacks(getFormValues());
+  const rawValues = getFormValues();
+  const formValues = withFallbacks(rawValues);
+
+  if (
+    rawValues.horizontalOffset > MAX_HORIZONTAL_OFFSET &&
+    formValues.horizontalOffset === MAX_HORIZONTAL_OFFSET
+  ) {
+    alert('더 이상 추가할 수 없습니다');
+    form.elements.horizontalOffset.value = MAX_HORIZONTAL_OFFSET;
+  }
 
   const label = {
     id: crypto.randomUUID(),
@@ -359,6 +391,9 @@ function renderPreview() {
     return;
   }
 
+  const page = document.createElement('div');
+  page.className = 'preview__page';
+
   const grid = document.createElement('div');
   grid.className = 'label-preview__grid';
   const columnCounts = previewLabels.map((label) => calculateAutoColumns(label.labelWidth));
@@ -368,6 +403,8 @@ function renderPreview() {
     const card = document.createElement('div');
     card.className = 'label-card';
     card.style.minHeight = `${label.labelHeight * 2.5}px`;
+    card.style.setProperty('--horizontal-offset', `${label.horizontalOffset}px`);
+    card.style.setProperty('--vertical-offset', `${label.verticalOffset}px`);
 
     if (label.isDraft) {
       card.classList.add('label-card--draft');
@@ -423,7 +460,8 @@ function renderPreview() {
     grid.appendChild(card);
   });
 
-  previewContainer.appendChild(grid);
+  page.appendChild(grid);
+  previewContainer.appendChild(page);
 }
 
 function mapBarcodeType(type) {
@@ -456,6 +494,8 @@ function buildPrintSheet(labels) {
       item.className = 'print-label';
       item.style.width = `${label.labelWidth}mm`;
       item.style.height = `${label.labelHeight}mm`;
+      item.style.setProperty('--horizontal-offset', `${label.horizontalOffset}px`);
+      item.style.setProperty('--vertical-offset', `${label.verticalOffset}px`);
 
       if (label.includeName) {
         const name = document.createElement('div');
@@ -516,7 +556,17 @@ function handlePrint() {
 }
 
 function updateDraft() {
-  const formValues = withFallbacks(getFormValues());
+  const rawValues = getFormValues();
+  const formValues = withFallbacks(rawValues);
+
+  if (
+    rawValues.horizontalOffset > MAX_HORIZONTAL_OFFSET &&
+    formValues.horizontalOffset === MAX_HORIZONTAL_OFFSET
+  ) {
+    alert('더 이상 추가할 수 없습니다');
+    form.elements.horizontalOffset.value = MAX_HORIZONTAL_OFFSET;
+  }
+
   persistFormState(formValues);
   const hasContent = Boolean(
     formValues.productName || formValues.subProductName || formValues.barcodeValue,
