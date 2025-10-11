@@ -1,6 +1,7 @@
 const form = document.getElementById('label-form');
 const labelList = document.getElementById('label-list');
 const previewContainer = document.getElementById('label-preview');
+const previewPagination = document.getElementById('preview-pagination');
 const resetButton = document.getElementById('reset-button');
 const printButton = document.getElementById('print-button');
 const printRoot = document.getElementById('print-root');
@@ -15,6 +16,8 @@ const MAX_HORIZONTAL_OFFSET = 60;
 const state = {
   labels: [],
   draft: null,
+  activePreviewIndex: 0,
+  editingLabelId: null,
 };
 
 let isResettingForm = false;
@@ -197,6 +200,64 @@ function persistFormState(values) {
   }
 }
 
+function applyFormValues(values) {
+  if (!values || typeof values !== 'object') return;
+
+  const elements = form.elements;
+
+  if ('productName' in values) {
+    elements.productName.value = (values.productName ?? '').toString();
+  }
+
+  if ('subProductName' in values) {
+    elements.subProductName.value = (values.subProductName ?? '').toString();
+  }
+
+  if ('barcodeValue' in values) {
+    elements.barcodeValue.value = (values.barcodeValue ?? '').toString();
+  }
+
+  if (Number.isFinite(values.productFontSize)) {
+    elements.productFontSize.value = values.productFontSize;
+  }
+
+  if (Number.isFinite(values.subProductFontSize)) {
+    elements.subProductFontSize.value = values.subProductFontSize;
+  }
+
+  if (Number.isFinite(values.barcodeFontSize)) {
+    elements.barcodeFontSize.value = values.barcodeFontSize;
+  }
+
+  if (Number.isFinite(values.labelWidth)) {
+    elements.labelWidth.value = values.labelWidth;
+  }
+
+  if (Number.isFinite(values.labelHeight)) {
+    elements.labelHeight.value = values.labelHeight;
+  }
+
+  if (Number.isFinite(values.horizontalOffset)) {
+    elements.horizontalOffset.value = values.horizontalOffset;
+  }
+
+  if (Number.isFinite(values.verticalOffset)) {
+    elements.verticalOffset.value = values.verticalOffset;
+  }
+
+  if (typeof values.barcodeType === 'string') {
+    elements.barcodeType.value = values.barcodeType;
+  }
+
+  if (typeof values.showText === 'boolean') {
+    elements.showText.checked = values.showText;
+  }
+
+  if (typeof values.includeName === 'boolean') {
+    elements.includeName.checked = values.includeName;
+  }
+}
+
 function restoreLabels() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.labels);
@@ -244,46 +305,7 @@ function restoreFormState() {
     if (!parsed || typeof parsed !== 'object') return null;
 
     isResettingForm = true;
-
-    if (typeof parsed.productName === 'string') {
-      form.elements.productName.value = parsed.productName;
-    }
-    if (typeof parsed.subProductName === 'string') {
-      form.elements.subProductName.value = parsed.subProductName;
-    }
-    if (typeof parsed.barcodeValue === 'string') {
-      form.elements.barcodeValue.value = parsed.barcodeValue;
-    }
-    if (typeof parsed.productFontSize === 'number') {
-      form.elements.productFontSize.value = parsed.productFontSize;
-    }
-    if (typeof parsed.subProductFontSize === 'number') {
-      form.elements.subProductFontSize.value = parsed.subProductFontSize;
-    }
-    if (typeof parsed.barcodeFontSize === 'number') {
-      form.elements.barcodeFontSize.value = parsed.barcodeFontSize;
-    }
-    if (typeof parsed.labelWidth === 'number') {
-      form.elements.labelWidth.value = parsed.labelWidth;
-    }
-    if (typeof parsed.labelHeight === 'number') {
-      form.elements.labelHeight.value = parsed.labelHeight;
-    }
-    if (typeof parsed.horizontalOffset === 'number') {
-      form.elements.horizontalOffset.value = parsed.horizontalOffset;
-    }
-    if (typeof parsed.verticalOffset === 'number') {
-      form.elements.verticalOffset.value = parsed.verticalOffset;
-    }
-    if (typeof parsed.barcodeType === 'string') {
-      form.elements.barcodeType.value = parsed.barcodeType;
-    }
-    if (typeof parsed.showText === 'boolean') {
-      form.elements.showText.checked = parsed.showText;
-    }
-    if (typeof parsed.includeName === 'boolean') {
-      form.elements.includeName.checked = parsed.includeName;
-    }
+    applyFormValues(parsed);
 
     return parsed;
   } catch (error) {
@@ -298,6 +320,23 @@ function restoreFormState() {
 function createLabelEntry(label) {
   const wrapper = document.createElement('div');
   wrapper.className = 'label-list__item';
+  wrapper.dataset.id = label.id;
+  wrapper.tabIndex = 0;
+  wrapper.setAttribute('role', 'button');
+  wrapper.setAttribute('aria-pressed', 'false');
+
+  wrapper.addEventListener('click', (event) => {
+    if (event.target.closest('button')) return;
+    focusPreviewOnLabel(label.id);
+  });
+
+  wrapper.addEventListener('keydown', (event) => {
+    if (event.target.closest('button')) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      focusPreviewOnLabel(label.id);
+    }
+  });
 
   const info = document.createElement('div');
   info.className = 'label-list__info';
@@ -322,9 +361,25 @@ function createLabelEntry(label) {
   meta.className = 'label-list__meta';
   meta.textContent = `${label.labelWidth} × ${label.labelHeight} mm`;
 
+  const actions = document.createElement('div');
+  actions.className = 'label-list__actions';
+
+  const editButton = document.createElement('button');
+  editButton.type = 'button';
+  editButton.className = 'label-list__edit';
+  editButton.textContent = '수정';
+  if (state.editingLabelId === label.id) {
+    editButton.textContent = '수정 중';
+    editButton.disabled = true;
+  } else {
+    editButton.addEventListener('click', () => {
+      startEditingLabel(label.id);
+    });
+  }
+
   const removeButton = document.createElement('button');
   removeButton.type = 'button';
-  removeButton.className = 'btn label-list__remove';
+  removeButton.className = 'label-list__remove';
   removeButton.textContent = '삭제';
   removeButton.addEventListener('click', () => {
     removeLabel(label.id);
@@ -332,21 +387,91 @@ function createLabelEntry(label) {
 
   wrapper.appendChild(info);
   wrapper.appendChild(meta);
-  wrapper.appendChild(removeButton);
+  actions.appendChild(editButton);
+  actions.appendChild(removeButton);
+  wrapper.appendChild(actions);
 
   return wrapper;
 }
 
-function renderLabelList() {
+function focusPreviewOnLabel(id) {
+  const previewLabels = getPreviewLabels();
+  const index = previewLabels.findIndex((label) => label.id === id);
+  if (index === -1) return;
+
+  if (state.activePreviewIndex !== index) {
+    state.activePreviewIndex = index;
+    renderPreview();
+  }
+}
+
+function startEditingLabel(id) {
+  const labelIndex = state.labels.findIndex((item) => item.id === id);
+  if (labelIndex === -1) return;
+
+  const targetLabel = state.labels[labelIndex];
+  const sanitized = withFallbacks(targetLabel);
+
+  state.editingLabelId = id;
+
+  isResettingForm = true;
+  applyFormValues(sanitized);
+  isResettingForm = false;
+
+  state.draft = {
+    ...sanitized,
+    id,
+    isDraft: true,
+    isEditing: true,
+  };
+
+  const previewLabels = getPreviewLabels();
+  const previewIndex = previewLabels.findIndex((label) => label.id === id);
+  state.activePreviewIndex = previewIndex === -1 ? labelIndex : previewIndex;
+
+  persistFormState({
+    productName: sanitized.productName,
+    subProductName: sanitized.subProductName,
+    barcodeValue: sanitized.barcodeValue,
+    barcodeType: sanitized.barcodeType,
+    productFontSize: sanitized.productFontSize,
+    subProductFontSize: sanitized.subProductFontSize,
+    barcodeFontSize: sanitized.barcodeFontSize,
+    labelWidth: sanitized.labelWidth,
+    labelHeight: sanitized.labelHeight,
+    showText: sanitized.showText,
+    includeName: sanitized.includeName,
+    horizontalOffset: sanitized.horizontalOffset,
+    verticalOffset: sanitized.verticalOffset,
+  });
+
+  renderPreview();
+}
+
+function renderLabelList(activeLabelId) {
   labelList.innerHTML = '';
   if (state.labels.length === 0) {
     labelList.innerHTML = '<p class="label-preview__empty">추가된 라벨이 없습니다.</p>';
     return;
   }
 
+  let highlightId = activeLabelId;
+  if (typeof highlightId === 'undefined') {
+    const activePreview = getActivePreviewLabel();
+    highlightId = activePreview ? activePreview.id : null;
+  }
+
   const fragment = document.createDocumentFragment();
   state.labels.forEach((label) => {
-    fragment.appendChild(createLabelEntry(label));
+    const entry = createLabelEntry(label);
+    if (highlightId && label.id === highlightId) {
+      entry.classList.add('label-list__item--active');
+    }
+    entry.setAttribute('aria-pressed', highlightId && label.id === highlightId ? 'true' : 'false');
+    if (state.editingLabelId === label.id) {
+      entry.setAttribute('data-editing', 'true');
+    }
+    fragment.appendChild(entry);
   });
   labelList.appendChild(fragment);
 }
@@ -364,20 +489,47 @@ function handleFormSubmit(event) {
     form.elements.horizontalOffset.value = MAX_HORIZONTAL_OFFSET;
   }
 
+  if (!formValues.productName || !formValues.barcodeValue) {
+    alert('상품명과 바코드 값은 필수 입력 항목입니다.');
+    return;
+  }
+
+  if (state.editingLabelId) {
+    const index = state.labels.findIndex((label) => label.id === state.editingLabelId);
+    if (index !== -1) {
+      state.labels[index] = {
+        id: state.editingLabelId,
+        ...formValues,
+      };
+      state.activePreviewIndex = index;
+    } else {
+      state.labels.push({
+        id: state.editingLabelId,
+        ...formValues,
+      });
+      state.activePreviewIndex = state.labels.length - 1;
+    }
+
+    state.draft = null;
+    state.editingLabelId = null;
+    persistLabels();
+    renderPreview();
+
+    isResettingForm = true;
+    form.reset();
+    isResettingForm = false;
+    return;
+  }
+
   const label = {
     id: generateId(),
     ...formValues,
   };
 
-  if (!label.productName || !label.barcodeValue) {
-    alert('상품명과 바코드 값은 필수 입력 항목입니다.');
-    return;
-  }
-
   state.labels.push(label);
   state.draft = null;
+  state.activePreviewIndex = state.labels.length - 1;
   persistLabels();
-  renderLabelList();
   renderPreview();
 
   isResettingForm = true;
@@ -386,9 +538,20 @@ function handleFormSubmit(event) {
 }
 
 function removeLabel(id) {
-  state.labels = state.labels.filter((label) => label.id !== id);
+  const index = state.labels.findIndex((label) => label.id === id);
+  if (index === -1) return;
+
+  state.labels.splice(index, 1);
   persistLabels();
-  renderLabelList();
+
+  if (state.editingLabelId === id) {
+    state.editingLabelId = null;
+    state.draft = null;
+    isResettingForm = true;
+    form.reset();
+    isResettingForm = false;
+  }
+
   renderPreview();
 }
 
@@ -396,8 +559,15 @@ function resetLabels() {
   if (state.labels.length === 0) return;
   if (confirm('모든 라벨을 삭제할까요?')) {
     state.labels = [];
+    state.activePreviewIndex = 0;
     persistLabels();
-    renderLabelList();
+
+    if (state.editingLabelId) {
+      state.editingLabelId = null;
+      updateDraft();
+      return;
+    }
+
     renderPreview();
   }
 }
@@ -429,14 +599,60 @@ function areLabelsEqual(a, b) {
 }
 
 function getPreviewLabels() {
+  if (state.editingLabelId) {
+    return state.labels.map((label) => {
+      if (label.id !== state.editingLabelId) {
+        return label;
+      }
+
+      if (state.draft && state.draft.isEditing && hasDraftContent(state.draft)) {
+        return {
+          ...state.draft,
+          id: label.id,
+          isEditingPreview: true,
+        };
+      }
+
+      return label;
+    });
+  }
+
   const labels = [...state.labels];
   if (state.draft && hasDraftContent(state.draft)) {
     const isDuplicate = labels.some((label) => areLabelsEqual(label, state.draft));
     if (!isDuplicate) {
-      labels.push(state.draft);
+      labels.push({
+        ...state.draft,
+        id: state.draft.id || 'draft',
+        isDraft: true,
+      });
     }
   }
   return labels;
+}
+
+function computePreviewState() {
+  const previewLabels = getPreviewLabels();
+  let activeIndex = state.activePreviewIndex;
+
+  if (previewLabels.length === 0) {
+    activeIndex = 0;
+  } else {
+    activeIndex = Math.min(Math.max(activeIndex, 0), previewLabels.length - 1);
+  }
+
+  if (activeIndex !== state.activePreviewIndex) {
+    state.activePreviewIndex = activeIndex;
+  }
+
+  const activeLabel = previewLabels[activeIndex] || null;
+
+  return { previewLabels, activeIndex, activeLabel };
+}
+
+function getActivePreviewLabel() {
+  const { activeLabel } = computePreviewState();
+  return activeLabel;
 }
 
 function createPreviewLabel(label) {
@@ -501,9 +717,11 @@ function createPreviewLabel(label) {
 
 function renderPreview() {
   previewContainer.innerHTML = '';
-  const previewLabels = getPreviewLabels();
+  const { previewLabels, activeIndex, activeLabel } = computePreviewState();
 
-  if (previewLabels.length === 0) {
+  if (previewLabels.length === 0 || !activeLabel) {
+    renderLabelList(null);
+    renderPreviewPagination(previewLabels, activeIndex);
     previewContainer.innerHTML = `
       <div class="label-preview__empty">
         <p>왼쪽에서 라벨 정보를 추가하면 미리보기가 표시됩니다.</p>
@@ -513,34 +731,25 @@ function renderPreview() {
     return;
   }
 
+  renderLabelList(activeLabel.id);
+  renderPreviewPagination(previewLabels, activeIndex);
+
   const sheet = document.createElement('div');
   sheet.className = 'preview__sheet';
   sheet.style.padding = `${mmToPx(PREVIEW_PADDING_MM)}px`;
 
-  let maxContentWidthMm = 0;
-  let totalContentHeightMm = 0;
+  const group = document.createElement('div');
+  group.className = 'preview__group';
+  group.style.gridTemplateColumns = `repeat(1, ${mmToPx(activeLabel.labelWidth)}px)`;
+  group.style.columnGap = '0px';
+  group.style.rowGap = '0px';
 
-  previewLabels.forEach((label, index) => {
-    const group = document.createElement('div');
-    group.className = 'preview__group';
-    group.style.gridTemplateColumns = `repeat(1, ${mmToPx(label.labelWidth)}px)`;
-    group.style.columnGap = '0px';
-    group.style.rowGap = '0px';
+  const previewLabel = createPreviewLabel(activeLabel);
+  group.appendChild(previewLabel);
+  sheet.appendChild(group);
 
-    const previewLabel = createPreviewLabel(label);
-    group.appendChild(previewLabel);
-
-    maxContentWidthMm = Math.max(maxContentWidthMm, label.labelWidth);
-    totalContentHeightMm += label.labelHeight;
-    if (index < previewLabels.length - 1) {
-      totalContentHeightMm += PREVIEW_GROUP_GAP_MM;
-    }
-
-    sheet.appendChild(group);
-  });
-
-  const totalWidthMm = maxContentWidthMm + PREVIEW_PADDING_MM * 2;
-  const totalHeightMm = totalContentHeightMm + PREVIEW_PADDING_MM * 2;
+  const totalWidthMm = activeLabel.labelWidth + PREVIEW_PADDING_MM * 2;
+  const totalHeightMm = activeLabel.labelHeight + PREVIEW_PADDING_MM * 2;
 
   const sheetWidthPx = mmToPx(totalWidthMm);
   const sheetHeightPx = mmToPx(totalHeightMm);
@@ -551,6 +760,94 @@ function renderPreview() {
   sheet.style.gap = `${mmToPx(PREVIEW_GROUP_GAP_MM)}px`;
 
   previewContainer.appendChild(sheet);
+}
+
+function getPreviewLabelDescription(label, index, total) {
+  if (!label) return '';
+
+  if (state.editingLabelId && label.id === state.editingLabelId) {
+    return label.productName ? `수정 중: ${label.productName}` : '수정 중인 라벨';
+  }
+
+  if (label.isDraft) {
+    return label.productName ? `작성 중: ${label.productName}` : '작성 중인 라벨';
+  }
+
+  if (label.productName) {
+    return label.productName;
+  }
+
+  if (label.barcodeValue) {
+    return `바코드 ${label.barcodeValue}`;
+  }
+
+  return `라벨 ${index + 1}`;
+}
+
+function renderPreviewPagination(previewLabels, activeIndex) {
+  if (!previewPagination) return;
+
+  const total = previewLabels.length;
+
+  if (total === 0) {
+    previewPagination.classList.add('is-hidden');
+    previewPagination.innerHTML = '';
+    return;
+  }
+
+  previewPagination.classList.remove('is-hidden');
+
+  const activeLabel = previewLabels[activeIndex] || null;
+  const description = getPreviewLabelDescription(activeLabel, activeIndex, total);
+  const pageIndicator = `${activeIndex + 1} / ${total}`;
+  const labelText = description ? `${pageIndicator} · ${description}` : pageIndicator;
+
+  previewPagination.innerHTML = '';
+
+  const labelElement = document.createElement('div');
+  labelElement.className = 'preview__pagination-label';
+  labelElement.textContent = labelText;
+
+  if (total === 1) {
+    previewPagination.appendChild(labelElement);
+    return;
+  }
+
+  const prevButton = document.createElement('button');
+  prevButton.type = 'button';
+  prevButton.textContent = '이전';
+  prevButton.setAttribute('aria-label', '이전 라벨 미리보기');
+  prevButton.disabled = activeIndex === 0;
+  prevButton.addEventListener('click', () => {
+    if (state.activePreviewIndex > 0) {
+      state.activePreviewIndex -= 1;
+      renderPreview();
+    }
+  });
+
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.textContent = '다음';
+  nextButton.setAttribute('aria-label', '다음 라벨 미리보기');
+  nextButton.disabled = activeIndex >= total - 1;
+  nextButton.addEventListener('click', () => {
+    if (state.activePreviewIndex < total - 1) {
+      state.activePreviewIndex += 1;
+      renderPreview();
+    }
+  });
+
+  const prevWrapper = document.createElement('div');
+  prevWrapper.className = 'preview__pagination-controls';
+  prevWrapper.appendChild(prevButton);
+
+  const nextWrapper = document.createElement('div');
+  nextWrapper.className = 'preview__pagination-controls';
+  nextWrapper.appendChild(nextButton);
+
+  previewPagination.appendChild(prevWrapper);
+  previewPagination.appendChild(labelElement);
+  previewPagination.appendChild(nextWrapper);
 }
 
 function mapBarcodeType(type) {
@@ -666,11 +963,29 @@ function updateDraft() {
     return;
   }
 
-  state.draft = {
-    ...formValues,
-    id: 'draft',
-    isDraft: true,
-  };
+  if (state.editingLabelId) {
+    state.draft = {
+      ...formValues,
+      id: state.editingLabelId,
+      isDraft: true,
+      isEditing: true,
+    };
+
+    const previewLabels = getPreviewLabels();
+    const index = previewLabels.findIndex((label) => label.id === state.editingLabelId);
+    if (index !== -1) {
+      state.activePreviewIndex = index;
+    }
+  } else {
+    state.draft = {
+      ...formValues,
+      id: 'draft',
+      isDraft: true,
+    };
+
+    const previewLabels = getPreviewLabels();
+    state.activePreviewIndex = previewLabels.length - 1;
+  }
 
   renderPreview();
 }
@@ -682,7 +997,6 @@ function handleFormChange() {
 
 function init() {
   restoreLabels();
-  renderLabelList();
   renderPreview();
 
   const restoredFormValues = restoreFormState();
@@ -693,6 +1007,7 @@ function init() {
   form.addEventListener('change', handleFormChange);
   form.addEventListener('reset', () => {
     state.draft = null;
+    state.editingLabelId = null;
     renderPreview();
     requestAnimationFrame(() => {
       persistFormState(null);
@@ -701,12 +1016,7 @@ function init() {
   printButton.addEventListener('click', handlePrint);
 
   if (restoredFormValues && hasDraftContent(restoredFormValues)) {
-    state.draft = {
-      ...withFallbacks(restoredFormValues),
-      id: 'draft',
-      isDraft: true,
-    };
-    renderPreview();
+    updateDraft();
   }
 }
 
