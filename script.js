@@ -19,6 +19,65 @@ const state = {
 
 let isResettingForm = false;
 
+function getJsBarcode() {
+  if (typeof globalThis === 'undefined') return null;
+  const library = globalThis.JsBarcode;
+  return typeof library === 'function' ? library : null;
+}
+
+function renderBarcode(svg, value, options) {
+  const JsBarcodeLibrary = getJsBarcode();
+  if (!JsBarcodeLibrary) {
+    return false;
+  }
+
+  try {
+    JsBarcodeLibrary(svg, value, options);
+    return true;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('바코드 생성 중 오류가 발생했습니다.', error);
+    return false;
+  }
+}
+
+function generateId() {
+  if (typeof globalThis !== 'undefined') {
+    const { crypto: globalCrypto } = globalThis;
+    if (globalCrypto) {
+      if (typeof globalCrypto.randomUUID === 'function') {
+        return globalCrypto.randomUUID();
+      }
+
+      if (typeof globalCrypto.getRandomValues === 'function') {
+        const bytes = globalCrypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+        const segments = [
+          bytes.subarray(0, 4),
+          bytes.subarray(4, 6),
+          bytes.subarray(6, 8),
+          bytes.subarray(8, 10),
+          bytes.subarray(10, 16),
+        ];
+
+        const hex = segments
+          .map((segment) =>
+            Array.from(segment)
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join(''),
+          )
+          .join('-');
+
+        return hex;
+      }
+    }
+  }
+
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function getFormValues() {
   const formData = new FormData(form);
 
@@ -166,7 +225,7 @@ function restoreLabels() {
 
           return {
             ...sanitized,
-            id: item.id || crypto.randomUUID(),
+            id: typeof item.id === 'string' && item.id ? item.id : generateId(),
           };
         });
       persistLabels();
@@ -320,7 +379,7 @@ function handleFormSubmit(event) {
   }
 
   const label = {
-    id: crypto.randomUUID(),
+    id: generateId(),
     ...formValues,
   };
 
@@ -434,17 +493,17 @@ function renderPreview() {
     card.appendChild(barcodeContainer);
 
     if (label.barcodeValue) {
-      try {
-        JsBarcode(svg, label.barcodeValue, {
-          format: mapBarcodeType(label.barcodeType),
-          height: label.labelHeight * 1.6,
-          width: 2,
-          displayValue: label.showText,
-          fontSize: label.barcodeFontSize,
-          margin: 4,
-        });
-      } catch (error) {
-        barcodeContainer.innerHTML = `<p class="label-preview__empty">바코드 생성에 실패했습니다.<br />입력 값을 확인해주세요.</p>`;
+      const rendered = renderBarcode(svg, label.barcodeValue, {
+        format: mapBarcodeType(label.barcodeType),
+        height: label.labelHeight * 1.6,
+        width: 2,
+        displayValue: label.showText,
+        fontSize: label.barcodeFontSize,
+        margin: 4,
+      });
+
+      if (!rendered) {
+        barcodeContainer.innerHTML = `<p class="label-preview__empty">바코드 스크립트를 불러오지 못했습니다.<br />인터넷 연결을 확인하거나 새로고침 후 다시 시도해주세요.</p>`;
       }
     } else {
       barcodeContainer.innerHTML =
@@ -519,15 +578,15 @@ function buildPrintSheet(labels) {
       barcodeWrapper.appendChild(svg);
       item.appendChild(barcodeWrapper);
 
-      try {
-        JsBarcode(svg, label.barcodeValue, {
-          format: mapBarcodeType(label.barcodeType),
-          displayValue: label.showText,
-          fontSize: label.barcodeFontSize,
-          height: label.labelHeight * 2.2,
-          margin: 0,
-        });
-      } catch (error) {
+      const rendered = renderBarcode(svg, label.barcodeValue, {
+        format: mapBarcodeType(label.barcodeType),
+        displayValue: label.showText,
+        fontSize: label.barcodeFontSize,
+        height: label.labelHeight * 2.2,
+        margin: 0,
+      });
+
+      if (!rendered) {
         barcodeWrapper.innerHTML = '<p>바코드 생성 오류</p>';
       }
 
