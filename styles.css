@@ -353,24 +353,26 @@ textarea:focus {
   height: auto;
 }
 
-#print-root {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
+@media screen {
+  #print-root {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
 
-#print-root[data-printing='true'] {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  display: block;
-  overflow: auto;
-  pointer-events: none;
-  opacity: 0;
-  z-index: -1;
+  #print-root[data-printing='true'] {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    overflow: auto;
+    pointer-events: none;
+    opacity: 0;
+    z-index: -1;
+  }
 }
 
 .print-sheet {
