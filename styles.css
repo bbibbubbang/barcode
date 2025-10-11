@@ -59,11 +59,18 @@ a {
 
 .controls,
 .preview {
-  background: var(--color-surface);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
   padding: 32px;
+}
+
+.controls {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   box-shadow: 0 16px 40px -32px rgba(27, 41, 89, 0.4);
+}
+
+.preview {
+  background: transparent;
 }
 
 .controls h2,
@@ -400,8 +407,8 @@ textarea:focus {
 .label-preview {
   border-radius: var(--radius-md);
   min-height: 420px;
-  padding: 32px;
-  background: #e9edf4;
+  padding: 24px;
+  background: transparent;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -409,10 +416,6 @@ textarea:focus {
 }
 
 .preview__sheet {
-  background: #fff;
-  border-radius: 18px;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 1px rgba(27, 36, 48, 0.12),
-    0 24px 48px rgba(27, 36, 48, 0.18);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -428,39 +431,6 @@ textarea:focus {
 .label-preview__empty {
   text-align: center;
   color: var(--color-muted);
-}
-
-
-.preview-label {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  border: 1px solid rgba(27, 36, 48, 0.12);
-  border-radius: 12px;
-  background: #fafbff;
-  box-sizing: border-box;
-  text-align: center;
-}
-
-.preview-label__name {
-  font-weight: 600;
-  color: var(--color-text);
-  white-space: pre-line;
-}
-
-.preview-label__subname {
-  color: var(--color-muted);
-  white-space: pre-line;
-}
-
-.preview-label__barcode {
-  width: 100%;
-}
-
-.preview-label__barcode svg {
-  width: 100%;
-  height: auto;
 }
 
 @media screen {
@@ -494,6 +464,7 @@ textarea:focus {
   align-content: center;
 }
 
+.preview-label,
 .print-label {
   --horizontal-offset: 0px;
   --vertical-offset: 0px;
@@ -507,8 +478,10 @@ textarea:focus {
   padding-right: calc(3mm + var(--horizontal-offset));
   border: 1px dashed transparent;
   box-sizing: border-box;
+  text-align: center;
 }
 
+.preview-label__name,
 .print-label__name {
   font-weight: 600;
   margin-bottom: calc(2mm - var(--vertical-offset));
@@ -516,6 +489,7 @@ textarea:focus {
   white-space: pre-line;
 }
 
+.preview-label__subname,
 .print-label__subname {
   font-size: 0.85rem;
   color: #444b55;
@@ -524,10 +498,12 @@ textarea:focus {
   white-space: pre-line;
 }
 
+.preview-label__barcode,
 .print-label__barcode {
   width: 100%;
 }
 
+.preview-label__barcode svg,
 .print-label__barcode svg {
   width: 100%;
   height: auto;

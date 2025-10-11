@@ -28,9 +28,6 @@ let printPageStyleElement = null;
 let hasWarnedPrintSizeMismatch = false;
 
 const MM_TO_PX = 96 / 25.4;
-const PREVIEW_PADDING_MM = 10;
-const PREVIEW_GROUP_GAP_MM = 6;
-
 function mmToPx(mm) {
   return mm * MM_TO_PX;
 }
@@ -750,23 +747,15 @@ function createPreviewLabel(label) {
   const element = document.createElement('div');
   element.className = 'preview-label';
 
-  const basePaddingPx = mmToPx(3);
-  const horizontalPaddingPx = basePaddingPx + label.horizontalOffset;
-  const verticalGapPx = Math.max(0, mmToPx(2.4) - label.verticalOffset);
-  const nameMarginPx = Math.max(0, mmToPx(2) - label.verticalOffset);
-
   element.style.width = `${mmToPx(label.labelWidth)}px`;
   element.style.height = `${mmToPx(label.labelHeight)}px`;
-  element.style.padding = `${basePaddingPx}px`;
-  element.style.paddingLeft = `${horizontalPaddingPx}px`;
-  element.style.paddingRight = `${horizontalPaddingPx}px`;
-  element.style.gap = `${verticalGapPx}px`;
+  element.style.setProperty('--horizontal-offset', `${label.horizontalOffset}px`);
+  element.style.setProperty('--vertical-offset', `${label.verticalOffset}px`);
 
   if (label.includeName) {
     const name = document.createElement('div');
     name.className = 'preview-label__name';
     name.style.fontSize = `${label.productFontSize}px`;
-    name.style.marginBottom = `${nameMarginPx}px`;
     name.textContent = label.productName;
     element.appendChild(name);
 
@@ -774,7 +763,6 @@ function createPreviewLabel(label) {
       const subName = document.createElement('div');
       subName.className = 'preview-label__subname';
       subName.style.fontSize = `${label.subProductFontSize}px`;
-      subName.style.marginBottom = `${nameMarginPx}px`;
       subName.textContent = label.subProductName;
       element.appendChild(subName);
     }
@@ -827,7 +815,6 @@ function renderPreview() {
 
   const sheet = document.createElement('div');
   sheet.className = 'preview__sheet';
-  sheet.style.padding = `${mmToPx(PREVIEW_PADDING_MM)}px`;
 
   const group = document.createElement('div');
   group.className = 'preview__group';
@@ -839,16 +826,13 @@ function renderPreview() {
   group.appendChild(previewLabel);
   sheet.appendChild(group);
 
-  const totalWidthMm = activeLabel.labelWidth + PREVIEW_PADDING_MM * 2;
-  const totalHeightMm = activeLabel.labelHeight + PREVIEW_PADDING_MM * 2;
-
-  const sheetWidthPx = mmToPx(totalWidthMm);
-  const sheetHeightPx = mmToPx(totalHeightMm);
+  const sheetWidthPx = mmToPx(activeLabel.labelWidth);
+  const sheetHeightPx = mmToPx(activeLabel.labelHeight);
 
   sheet.style.width = `${sheetWidthPx}px`;
   sheet.style.minWidth = `${sheetWidthPx}px`;
   sheet.style.minHeight = `${sheetHeightPx}px`;
-  sheet.style.gap = `${mmToPx(PREVIEW_GROUP_GAP_MM)}px`;
+  sheet.style.padding = '0px';
 
   previewContainer.appendChild(sheet);
 }
