@@ -1025,16 +1025,23 @@ function buildPrintSheet(labels) {
   return sheet;
 }
 
+function getPrintableLabels() {
+  const labels = getPreviewLabels();
+  return labels.filter((label) => label && hasDraftContent(label));
+}
+
 function handlePrint() {
-  if (state.labels.length === 0) {
+  const printableLabels = getPrintableLabels();
+
+  if (printableLabels.length === 0) {
     alert('인쇄할 라벨이 없습니다. 먼저 라벨을 추가해주세요.');
     return;
   }
 
-  applyPrintPageSizeFromLabels(state.labels);
+  applyPrintPageSizeFromLabels(printableLabels);
 
   printRoot.innerHTML = '';
-  const sheet = buildPrintSheet(state.labels);
+  const sheet = buildPrintSheet(printableLabels);
   printRoot.appendChild(sheet);
   printRoot.setAttribute('data-printing', 'true');
 
@@ -1046,7 +1053,9 @@ function handlePrint() {
 }
 
 async function handleDownloadPdf() {
-  if (state.labels.length === 0) {
+  const printableLabels = getPrintableLabels();
+
+  if (printableLabels.length === 0) {
     alert('다운로드할 라벨이 없습니다. 먼저 라벨을 추가해주세요.');
     return;
   }
@@ -1074,7 +1083,7 @@ async function handleDownloadPdf() {
   exportContainer.style.zIndex = '-1';
   exportContainer.setAttribute('aria-hidden', 'true');
 
-  const sheet = buildPrintSheet(state.labels);
+  const sheet = buildPrintSheet(printableLabels);
   exportContainer.appendChild(sheet);
   document.body.appendChild(exportContainer);
 
@@ -1196,12 +1205,13 @@ function init() {
 }
 
 window.addEventListener('beforeprint', () => {
-  if (state.labels.length === 0) return;
+  const printableLabels = getPrintableLabels();
+  if (printableLabels.length === 0) return;
 
-  applyPrintPageSizeFromLabels(state.labels);
+  applyPrintPageSizeFromLabels(printableLabels);
 
   if (printRoot.childElementCount === 0) {
-    const sheet = buildPrintSheet(state.labels);
+    const sheet = buildPrintSheet(printableLabels);
     printRoot.appendChild(sheet);
   }
 
