@@ -519,26 +519,19 @@ function renderPreview() {
   let totalContentHeightMm = 0;
 
   previewLabels.forEach((label, index) => {
-    const columns = calculateAutoColumns(label.labelWidth);
-    const rows = Math.max(1, Math.ceil(label.quantity / columns));
-    const groupWidthMm = columns * label.labelWidth;
-    const groupHeightMm = rows * label.labelHeight;
-
-    maxContentWidthMm = Math.max(maxContentWidthMm, groupWidthMm);
-    totalContentHeightMm += groupHeightMm;
-    if (index < previewLabels.length - 1) {
-      totalContentHeightMm += PREVIEW_GROUP_GAP_MM;
-    }
-
     const group = document.createElement('div');
     group.className = 'preview__group';
-    group.style.gridTemplateColumns = `repeat(${columns}, ${mmToPx(label.labelWidth)}px)`;
+    group.style.gridTemplateColumns = `repeat(1, ${mmToPx(label.labelWidth)}px)`;
     group.style.columnGap = '0px';
     group.style.rowGap = '0px';
 
-    for (let i = 0; i < label.quantity; i += 1) {
-      const previewLabel = createPreviewLabel(label);
-      group.appendChild(previewLabel);
+    const previewLabel = createPreviewLabel(label);
+    group.appendChild(previewLabel);
+
+    maxContentWidthMm = Math.max(maxContentWidthMm, label.labelWidth);
+    totalContentHeightMm += label.labelHeight;
+    if (index < previewLabels.length - 1) {
+      totalContentHeightMm += PREVIEW_GROUP_GAP_MM;
     }
 
     sheet.appendChild(group);
@@ -580,7 +573,7 @@ function buildPrintSheet(labels) {
     const group = document.createElement('div');
     group.className = 'print-sheet__group';
     group.style.display = 'grid';
-    group.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+    group.style.gridTemplateColumns = `repeat(${columns}, ${label.labelWidth}mm)`;
     group.style.gap = '0';
 
     for (let i = 0; i < label.quantity; i += 1) {
@@ -643,9 +636,12 @@ function handlePrint() {
   printRoot.innerHTML = '';
   const sheet = buildPrintSheet(state.labels);
   printRoot.appendChild(sheet);
+  printRoot.setAttribute('data-printing', 'true');
 
   requestAnimationFrame(() => {
-    window.print();
+    requestAnimationFrame(() => {
+      window.print();
+    });
   });
 }
 
@@ -707,8 +703,20 @@ function init() {
   renderPreview();
 }
 
+window.addEventListener('beforeprint', () => {
+  if (state.labels.length === 0) return;
+
+  if (printRoot.childElementCount === 0) {
+    const sheet = buildPrintSheet(state.labels);
+    printRoot.appendChild(sheet);
+  }
+
+  printRoot.setAttribute('data-printing', 'true');
+});
+
 window.addEventListener('afterprint', () => {
   printRoot.innerHTML = '';
+  printRoot.removeAttribute('data-printing');
 });
 
 if (document.readyState === 'loading') {
