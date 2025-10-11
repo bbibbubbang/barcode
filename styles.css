@@ -487,9 +487,11 @@ textarea:focus {
 
 .print-sheet {
   display: grid;
-  gap: 6mm;
-  padding: 10mm;
+  gap: 0;
+  padding: 0;
   box-sizing: border-box;
+  justify-items: center;
+  align-content: center;
 }
 
 .print-label {
@@ -535,6 +537,13 @@ textarea:focus {
   break-inside: avoid;
   display: grid;
   gap: 0;
+  justify-items: center;
+  align-content: center;
+  page-break-after: always;
+}
+
+.print-sheet__group:last-child {
+  page-break-after: auto;
 }
 
 .footer {
