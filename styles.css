@@ -512,6 +512,11 @@ textarea:focus {
     z-index: auto;
   }
 
+  #print-root[data-printing='true'] {
+    opacity: 1 !important;
+    z-index: auto !important;
+  }
+
   #print-root .print-sheet {
     width: 100%;
   }
