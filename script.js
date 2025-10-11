@@ -4,6 +4,7 @@ const previewContainer = document.getElementById('label-preview');
 const previewPagination = document.getElementById('preview-pagination');
 const resetButton = document.getElementById('reset-button');
 const printButton = document.getElementById('print-button');
+const downloadButton = document.getElementById('download-button');
 const printRoot = document.getElementById('print-root');
 
 const PRINT_PAGE_STYLE_ID = 'barcode-maker-print-page-size';
@@ -1044,6 +1045,74 @@ function handlePrint() {
   });
 }
 
+async function handleDownloadPdf() {
+  if (state.labels.length === 0) {
+    alert('다운로드할 라벨이 없습니다. 먼저 라벨을 추가해주세요.');
+    return;
+  }
+
+  const jsPdfNamespace = globalThis.jspdf || null;
+  const { jsPDF } = jsPdfNamespace || {};
+
+  if (typeof jsPDF !== 'function') {
+    alert('PDF 생성 도구를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
+
+  const html2canvas = globalThis.html2canvas || null;
+  if (typeof html2canvas !== 'function') {
+    alert('PDF 생성 도구를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
+
+  const exportContainer = document.createElement('div');
+  exportContainer.style.position = 'fixed';
+  exportContainer.style.left = '-10000px';
+  exportContainer.style.top = '0';
+  exportContainer.style.pointerEvents = 'none';
+  exportContainer.style.opacity = '0';
+  exportContainer.style.zIndex = '-1';
+  exportContainer.setAttribute('aria-hidden', 'true');
+
+  const sheet = buildPrintSheet(state.labels);
+  exportContainer.appendChild(sheet);
+  document.body.appendChild(exportContainer);
+
+  try {
+    const canvas = await html2canvas(sheet, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+    });
+
+    const widthMm = canvas.width / MM_TO_PX;
+    const heightMm = canvas.height / MM_TO_PX;
+    const hasValidSize =
+      Number.isFinite(widthMm) && widthMm > 0 && Number.isFinite(heightMm) && heightMm > 0;
+    const pdfWidth = hasValidSize ? widthMm : 210;
+    const pdfHeight = hasValidSize ? heightMm : 297;
+    const orientation = pdfWidth >= pdfHeight ? 'landscape' : 'portrait';
+
+    const doc = new jsPDF({
+      orientation,
+      unit: 'mm',
+      format: [pdfWidth, pdfHeight],
+    });
+
+    const imageData = canvas.toDataURL('image/png');
+    doc.addImage(imageData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    doc.save('barcode-labels.pdf');
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('PDF 생성 중 오류가 발생했습니다.', error);
+    alert('PDF 생성 중 오류가 발생했습니다. 다시 시도해주세요.');
+  } finally {
+    if (exportContainer.parentNode) {
+      exportContainer.parentNode.removeChild(exportContainer);
+    }
+  }
+}
+
 function updateDraft() {
   const rawValues = getFormValues();
   const formValues = withFallbacks(rawValues);
@@ -1117,6 +1186,9 @@ function init() {
     });
   });
   printButton.addEventListener('click', handlePrint);
+  if (downloadButton) {
+    downloadButton.addEventListener('click', handleDownloadPdf);
+  }
 
   if (restoredFormValues && hasDraftContent(restoredFormValues)) {
     updateDraft();

@@ -12,6 +12,14 @@
       rel="stylesheet"
     />
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js" defer></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+      defer
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+      defer
+    ></script>
     <script src="script.js" defer></script>
   </head>
   <body>
@@ -172,6 +180,7 @@
           <h2>프린트 미리보기</h2>
           <div class="preview__actions">
             <button id="print-button" class="btn btn--primary">인쇄</button>
+            <button id="download-button" class="btn">PDF 다운로드</button>
           </div>
         </div>
         <div
