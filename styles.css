@@ -274,6 +274,21 @@ select:focus {
   min-height: 160px;
 }
 
+.label-card--draft {
+  border-style: dashed;
+  background: rgba(39, 110, 241, 0.08);
+}
+
+.label-card__badge {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: rgba(39, 110, 241, 0.12);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
 .label-card__name {
   font-weight: 600;
   font-size: 0.95rem;
@@ -282,9 +297,19 @@ select:focus {
   color: var(--color-text);
 }
 
+#print-root {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .print-sheet {
   display: grid;
-  gap: 0;
+  gap: 6mm;
+  padding: 10mm;
+  box-sizing: border-box;
 }
 
 .print-label {
@@ -292,7 +317,7 @@ select:focus {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 6mm;
+  padding: 3mm;
   border: 1px dashed transparent;
 }
 
@@ -305,6 +330,12 @@ select:focus {
 .print-label__barcode svg {
   width: 100%;
   height: auto;
+}
+
+.print-sheet__group {
+  break-inside: avoid;
+  display: grid;
+  gap: 0;
 }
 
 .footer {
@@ -353,35 +384,30 @@ select:focus {
 }
 
 @media print {
+  @page {
+    margin: 0;
+  }
+
   body {
     background: #fff;
   }
 
   .hero,
-  .controls,
-  .preview__header,
-  .preview__hint,
-  .footer,
-  .btn,
-  .label-list {
+  .app,
+  .footer {
     display: none !important;
   }
 
-  .app {
-    display: block;
-    margin: 0;
-    padding: 0;
+  #print-root {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    pointer-events: all;
+    display: block !important;
   }
 
-  .preview {
-    border: none;
-    border-radius: 0;
-    padding: 0;
-    box-shadow: none;
-  }
-
-  .label-preview {
-    border: none;
-    padding: 0;
+  #print-root .print-sheet {
+    width: 100%;
   }
 }
