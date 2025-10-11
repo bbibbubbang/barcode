@@ -6,6 +6,8 @@ const resetButton = document.getElementById('reset-button');
 const printButton = document.getElementById('print-button');
 const printRoot = document.getElementById('print-root');
 
+const PRINT_PAGE_STYLE_ID = 'barcode-maker-print-page-size';
+
 const STORAGE_KEYS = {
   labels: 'barcode-maker:labels',
   form: 'barcode-maker:form',
@@ -21,6 +23,8 @@ const state = {
 };
 
 let isResettingForm = false;
+let printPageStyleElement = null;
+let hasWarnedPrintSizeMismatch = false;
 
 const MM_TO_PX = 96 / 25.4;
 const PREVIEW_PADDING_MM = 10;
@@ -28,6 +32,92 @@ const PREVIEW_GROUP_GAP_MM = 6;
 
 function mmToPx(mm) {
   return mm * MM_TO_PX;
+}
+
+function getPrintPageSizeFromLabels(labels, options = {}) {
+  if (!Array.isArray(labels) || labels.length === 0) return null;
+
+  const { warn = true } = options;
+
+  const activeIndex = Math.min(
+    Math.max(state.activePreviewIndex, 0),
+    labels.length - 1,
+  );
+
+  const targetLabel = labels[activeIndex] || labels[0];
+  const width = Number(targetLabel.labelWidth);
+  const height = Number(targetLabel.labelHeight);
+
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+
+  const hasDifferentSize = labels.some((label) => {
+    if (!label) return false;
+    return (
+      Number(label.labelWidth) !== width || Number(label.labelHeight) !== height
+    );
+  });
+
+  if (hasDifferentSize) {
+    if (warn && !hasWarnedPrintSizeMismatch) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '모든 라벨의 크기가 동일하지 않습니다. 첫 번째 라벨의 크기로 페이지 크기를 설정합니다.',
+      );
+      hasWarnedPrintSizeMismatch = true;
+    }
+  } else {
+    hasWarnedPrintSizeMismatch = false;
+  }
+
+  return { width, height };
+}
+
+function applyPrintPageSize(widthMm, heightMm) {
+  if (!Number.isFinite(widthMm) || !Number.isFinite(heightMm)) {
+    removePrintPageSize();
+    return;
+  }
+
+  if (!printPageStyleElement) {
+    printPageStyleElement = document.getElementById(PRINT_PAGE_STYLE_ID);
+    if (!printPageStyleElement) {
+      printPageStyleElement = document.createElement('style');
+      printPageStyleElement.id = PRINT_PAGE_STYLE_ID;
+      document.head.appendChild(printPageStyleElement);
+    }
+  }
+
+  printPageStyleElement.textContent = `@media print {\n  @page {\n    size: ${widthMm}mm ${heightMm}mm;\n    margin: 0;\n  }\n}`;
+
+  if (printRoot) {
+    printRoot.style.setProperty('--print-page-width', `${widthMm}mm`);
+    printRoot.style.setProperty('--print-page-height', `${heightMm}mm`);
+  }
+}
+
+function applyPrintPageSizeFromLabels(labels) {
+  const pageSize = getPrintPageSizeFromLabels(labels);
+  if (!pageSize) {
+    removePrintPageSize();
+    return;
+  }
+
+  applyPrintPageSize(pageSize.width, pageSize.height);
+}
+
+function removePrintPageSize() {
+  if (printPageStyleElement && printPageStyleElement.parentNode) {
+    printPageStyleElement.parentNode.removeChild(printPageStyleElement);
+  }
+  printPageStyleElement = null;
+  hasWarnedPrintSizeMismatch = false;
+
+  if (printRoot) {
+    printRoot.style.removeProperty('--print-page-width');
+    printRoot.style.removeProperty('--print-page-height');
+  }
 }
 
 function getJsBarcode() {
@@ -867,12 +957,23 @@ function buildPrintSheet(labels) {
   const sheet = document.createElement('div');
   sheet.className = 'print-sheet';
 
+  const pageSize = getPrintPageSizeFromLabels(labels, { warn: false });
+  if (pageSize) {
+    sheet.style.width = `${pageSize.width}mm`;
+    sheet.style.minWidth = `${pageSize.width}mm`;
+    sheet.style.maxWidth = `${pageSize.width}mm`;
+    sheet.style.minHeight = `${pageSize.height}mm`;
+  }
+
   labels.forEach((label) => {
     const group = document.createElement('div');
     group.className = 'print-sheet__group';
     group.style.display = 'grid';
     group.style.gridTemplateColumns = `${label.labelWidth}mm`;
     group.style.gap = '0';
+    group.style.justifyItems = 'center';
+    group.style.alignItems = 'center';
+    group.style.minHeight = `${label.labelHeight}mm`;
 
     const item = document.createElement('div');
     item.className = 'print-label';
@@ -928,6 +1029,8 @@ function handlePrint() {
     alert('인쇄할 라벨이 없습니다. 먼저 라벨을 추가해주세요.');
     return;
   }
+
+  applyPrintPageSizeFromLabels(state.labels);
 
   printRoot.innerHTML = '';
   const sheet = buildPrintSheet(state.labels);
@@ -1023,6 +1126,8 @@ function init() {
 window.addEventListener('beforeprint', () => {
   if (state.labels.length === 0) return;
 
+  applyPrintPageSizeFromLabels(state.labels);
+
   if (printRoot.childElementCount === 0) {
     const sheet = buildPrintSheet(state.labels);
     printRoot.appendChild(sheet);
@@ -1034,6 +1139,7 @@ window.addEventListener('beforeprint', () => {
 window.addEventListener('afterprint', () => {
   printRoot.innerHTML = '';
   printRoot.removeAttribute('data-printing');
+  removePrintPageSize();
 });
 
 if (document.readyState === 'loading') {
