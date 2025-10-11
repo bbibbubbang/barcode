@@ -5,6 +5,11 @@ const resetButton = document.getElementById('reset-button');
 const printButton = document.getElementById('print-button');
 const printRoot = document.getElementById('print-root');
 
+const STORAGE_KEYS = {
+  labels: 'barcode-maker:labels',
+  form: 'barcode-maker:form',
+};
+
 const state = {
   labels: [],
   draft: null,
@@ -17,13 +22,15 @@ function getFormValues() {
 
   return {
     productName: (formData.get('productName') || '').trim(),
+    subProductName: (formData.get('subProductName') || '').trim(),
     barcodeValue: (formData.get('barcodeValue') || '').trim(),
     quantity: Number(formData.get('quantity')),
     barcodeType: formData.get('barcodeType') || 'code128',
-    fontSize: Number(formData.get('fontSize')),
+    productFontSize: Number(formData.get('productFontSize')),
+    subProductFontSize: Number(formData.get('subProductFontSize')),
+    barcodeFontSize: Number(formData.get('barcodeFontSize')),
     labelWidth: Number(formData.get('labelWidth')),
     labelHeight: Number(formData.get('labelHeight')),
-    columns: Number(formData.get('columns')),
     showText: formData.get('showText') === 'on',
     includeName: formData.get('includeName') === 'on',
   };
@@ -50,10 +57,12 @@ function normalizeNumber(value, { min, max, fallback }) {
 function getDefaults() {
   return {
     quantity: Number(form.elements.quantity?.defaultValue) || 1,
-    fontSize: Number(form.elements.fontSize?.defaultValue) || 14,
+    productFontSize: Number(form.elements.productFontSize?.defaultValue) || 16,
+    subProductFontSize:
+      Number(form.elements.subProductFontSize?.defaultValue) || 14,
+    barcodeFontSize: Number(form.elements.barcodeFontSize?.defaultValue) || 12,
     labelWidth: Number(form.elements.labelWidth?.defaultValue) || 60,
     labelHeight: Number(form.elements.labelHeight?.defaultValue) || 40,
-    columns: Number(form.elements.columns?.defaultValue) || 1,
   };
 }
 
@@ -67,10 +76,20 @@ function withFallbacks(values) {
       max: 200,
       fallback: defaults.quantity,
     }),
-    fontSize: normalizeNumber(values.fontSize, {
-      min: 10,
-      max: 24,
-      fallback: defaults.fontSize,
+    productFontSize: normalizeNumber(values.productFontSize, {
+      min: 8,
+      max: 36,
+      fallback: defaults.productFontSize,
+    }),
+    subProductFontSize: normalizeNumber(values.subProductFontSize, {
+      min: 8,
+      max: 32,
+      fallback: defaults.subProductFontSize,
+    }),
+    barcodeFontSize: normalizeNumber(values.barcodeFontSize, {
+      min: 8,
+      max: 28,
+      fallback: defaults.barcodeFontSize,
     }),
     labelWidth: normalizeNumber(values.labelWidth, {
       min: 30,
@@ -82,20 +101,151 @@ function withFallbacks(values) {
       max: 60,
       fallback: defaults.labelHeight,
     }),
-    columns: normalizeNumber(values.columns, {
-      min: 1,
-      max: 4,
-      fallback: defaults.columns,
-    }),
   };
+}
+
+function persistLabels() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.labels, JSON.stringify(state.labels));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('라벨 정보를 저장하는 중 오류가 발생했습니다.', error);
+  }
+}
+
+function persistFormState(values) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.form, JSON.stringify(values));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('폼 정보를 저장하는 중 오류가 발생했습니다.', error);
+  }
+}
+
+function restoreLabels() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.labels);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      state.labels = parsed
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => {
+          const sanitized = withFallbacks({
+            ...item,
+            productName: (item.productName || '').toString().trim(),
+            subProductName: (item.subProductName || '').toString().trim(),
+            barcodeValue: (item.barcodeValue || '').toString().trim(),
+            barcodeType: item.barcodeType || 'code128',
+            showText: item.showText !== false,
+            includeName: item.includeName !== false,
+            quantity: Number(item.quantity),
+            productFontSize: Number(item.productFontSize),
+            subProductFontSize: Number(item.subProductFontSize),
+            barcodeFontSize: Number(item.barcodeFontSize),
+            labelWidth: Number(item.labelWidth),
+            labelHeight: Number(item.labelHeight),
+          });
+
+          return {
+            ...sanitized,
+            id: item.id || crypto.randomUUID(),
+          };
+        });
+      persistLabels();
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('저장된 라벨을 불러오는 중 오류가 발생했습니다.', error);
+  }
+}
+
+function restoreFormState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.form);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+
+    isResettingForm = true;
+
+    if (typeof parsed.productName === 'string') {
+      form.elements.productName.value = parsed.productName;
+    }
+    if (typeof parsed.subProductName === 'string') {
+      form.elements.subProductName.value = parsed.subProductName;
+    }
+    if (typeof parsed.barcodeValue === 'string') {
+      form.elements.barcodeValue.value = parsed.barcodeValue;
+    }
+    if (typeof parsed.quantity === 'number') {
+      form.elements.quantity.value = parsed.quantity;
+    }
+    if (typeof parsed.productFontSize === 'number') {
+      form.elements.productFontSize.value = parsed.productFontSize;
+    }
+    if (typeof parsed.subProductFontSize === 'number') {
+      form.elements.subProductFontSize.value = parsed.subProductFontSize;
+    }
+    if (typeof parsed.barcodeFontSize === 'number') {
+      form.elements.barcodeFontSize.value = parsed.barcodeFontSize;
+    }
+    if (typeof parsed.labelWidth === 'number') {
+      form.elements.labelWidth.value = parsed.labelWidth;
+    }
+    if (typeof parsed.labelHeight === 'number') {
+      form.elements.labelHeight.value = parsed.labelHeight;
+    }
+    if (typeof parsed.barcodeType === 'string') {
+      form.elements.barcodeType.value = parsed.barcodeType;
+    }
+    if (typeof parsed.showText === 'boolean') {
+      form.elements.showText.checked = parsed.showText;
+    }
+    if (typeof parsed.includeName === 'boolean') {
+      form.elements.includeName.checked = parsed.includeName;
+    }
+
+    isResettingForm = false;
+  } catch (error) {
+    isResettingForm = false;
+    // eslint-disable-next-line no-console
+    console.error('저장된 폼을 불러오는 중 오류가 발생했습니다.', error);
+  }
+}
+
+function calculateAutoColumns(labelWidth) {
+  if (!Number.isFinite(labelWidth) || labelWidth <= 0) {
+    return 1;
+  }
+
+  const printableWidth = 210;
+  const columns = Math.max(1, Math.floor(printableWidth / labelWidth));
+  return Math.min(columns, 4);
 }
 
 function createLabelEntry(label) {
   const wrapper = document.createElement('div');
   wrapper.className = 'label-list__item';
 
+  const info = document.createElement('div');
+  info.className = 'label-list__info';
+
   const name = document.createElement('strong');
-  name.textContent = `${label.productName} (${label.barcodeValue})`;
+  name.textContent = label.productName;
+  info.appendChild(name);
+
+  if (label.subProductName) {
+    const subName = document.createElement('div');
+    subName.className = 'label-list__subname';
+    subName.textContent = label.subProductName;
+    info.appendChild(subName);
+  }
+
+  const barcode = document.createElement('div');
+  barcode.className = 'label-list__barcode';
+  barcode.textContent = `바코드: ${label.barcodeValue}`;
+  info.appendChild(barcode);
 
   const meta = document.createElement('div');
   meta.className = 'label-list__meta';
@@ -112,7 +262,7 @@ function createLabelEntry(label) {
     removeLabel(label.id);
   });
 
-  wrapper.appendChild(name);
+  wrapper.appendChild(info);
   wrapper.appendChild(meta);
   wrapper.appendChild(removeButton);
 
@@ -135,7 +285,7 @@ function renderLabelList() {
 
 function handleFormSubmit(event) {
   event.preventDefault();
-  const formValues = getFormValues();
+  const formValues = withFallbacks(getFormValues());
 
   const label = {
     id: crypto.randomUUID(),
@@ -154,6 +304,7 @@ function handleFormSubmit(event) {
 
   state.labels.push(label);
   state.draft = null;
+  persistLabels();
   renderLabelList();
   renderPreview();
 
@@ -164,6 +315,7 @@ function handleFormSubmit(event) {
 
 function removeLabel(id) {
   state.labels = state.labels.filter((label) => label.id !== id);
+  persistLabels();
   renderLabelList();
   renderPreview();
 }
@@ -172,6 +324,7 @@ function resetLabels() {
   if (state.labels.length === 0) return;
   if (confirm('모든 라벨을 삭제할까요?')) {
     state.labels = [];
+    persistLabels();
     renderLabelList();
     renderPreview();
   }
@@ -208,9 +361,8 @@ function renderPreview() {
 
   const grid = document.createElement('div');
   grid.className = 'label-preview__grid';
-  grid.dataset.columns = Math.max(
-    ...previewLabels.map((label) => Math.max(1, Math.min(label.columns || 1, 4))),
-  );
+  const columnCounts = previewLabels.map((label) => calculateAutoColumns(label.labelWidth));
+  grid.dataset.columns = Math.max(1, ...columnCounts).toString();
 
   previewLabels.forEach((label) => {
     const card = document.createElement('div');
@@ -225,8 +377,17 @@ function renderPreview() {
     if (label.includeName) {
       const name = document.createElement('div');
       name.className = 'label-card__name';
+      name.style.fontSize = `${label.productFontSize}px`;
       name.textContent = label.productName;
       card.appendChild(name);
+
+      if (label.subProductName) {
+        const subName = document.createElement('div');
+        subName.className = 'label-card__subname';
+        subName.style.fontSize = `${label.subProductFontSize}px`;
+        subName.textContent = label.subProductName;
+        card.appendChild(subName);
+      }
     }
 
     const barcodeContainer = document.createElement('div');
@@ -242,7 +403,7 @@ function renderPreview() {
           height: label.labelHeight * 1.6,
           width: 2,
           displayValue: label.showText,
-          fontSize: label.fontSize,
+          fontSize: label.barcodeFontSize,
           margin: 4,
         });
       } catch (error) {
@@ -256,9 +417,6 @@ function renderPreview() {
     const meta = document.createElement('div');
     meta.className = 'label-list__meta';
     const metaInfo = [`${label.quantity}매 출력`, `${label.labelWidth} × ${label.labelHeight}mm`];
-    if (label.isDraft) {
-      metaInfo.push('작성 중 라벨');
-    }
     meta.innerHTML = metaInfo.map((text) => `<span>${text}</span>`).join('');
     card.appendChild(meta);
 
@@ -286,7 +444,7 @@ function buildPrintSheet(labels) {
   sheet.className = 'print-sheet';
 
   labels.forEach((label) => {
-    const columns = Math.min(Math.max(label.columns, 1), 4);
+    const columns = calculateAutoColumns(label.labelWidth);
     const group = document.createElement('div');
     group.className = 'print-sheet__group';
     group.style.display = 'grid';
@@ -302,9 +460,17 @@ function buildPrintSheet(labels) {
       if (label.includeName) {
         const name = document.createElement('div');
         name.className = 'print-label__name';
-        name.style.fontSize = `${label.fontSize}px`;
+        name.style.fontSize = `${label.productFontSize}px`;
         name.textContent = label.productName;
         item.appendChild(name);
+
+        if (label.subProductName) {
+          const subName = document.createElement('div');
+          subName.className = 'print-label__subname';
+          subName.style.fontSize = `${label.subProductFontSize}px`;
+          subName.textContent = label.subProductName;
+          item.appendChild(subName);
+        }
       }
 
       const barcodeWrapper = document.createElement('div');
@@ -317,7 +483,7 @@ function buildPrintSheet(labels) {
         JsBarcode(svg, label.barcodeValue, {
           format: mapBarcodeType(label.barcodeType),
           displayValue: label.showText,
-          fontSize: label.fontSize,
+          fontSize: label.barcodeFontSize,
           height: label.labelHeight * 2.2,
           margin: 0,
         });
@@ -351,7 +517,10 @@ function handlePrint() {
 
 function updateDraft() {
   const formValues = withFallbacks(getFormValues());
-  const hasContent = Boolean(formValues.productName || formValues.barcodeValue);
+  persistFormState(formValues);
+  const hasContent = Boolean(
+    formValues.productName || formValues.subProductName || formValues.barcodeValue,
+  );
 
   if (!hasContent) {
     state.draft = null;
@@ -374,6 +543,9 @@ function handleFormChange() {
 }
 
 function init() {
+  restoreLabels();
+  restoreFormState();
+
   form.addEventListener('submit', handleFormSubmit);
   resetButton.addEventListener('click', resetLabels);
   form.addEventListener('input', handleFormChange);
@@ -381,9 +553,13 @@ function init() {
   form.addEventListener('reset', () => {
     state.draft = null;
     renderPreview();
+    requestAnimationFrame(() => {
+      persistFormState(withFallbacks(getFormValues()));
+    });
   });
   printButton.addEventListener('click', handlePrint);
   renderLabelList();
+  updateDraft();
   renderPreview();
 }
 

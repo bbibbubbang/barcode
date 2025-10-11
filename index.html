@@ -32,13 +32,44 @@
         <form id="label-form">
           <div class="form-row">
             <label for="product-name">상품명</label>
-            <input
+            <textarea
               id="product-name"
               name="productName"
-              type="text"
+              rows="2"
               placeholder="예: 프리미엄 원두커피"
               required
-            />
+            ></textarea>
+            <div class="form-subcontrol">
+              <label for="product-font-size">글자 크기</label>
+              <input
+                id="product-font-size"
+                name="productFontSize"
+                type="number"
+                min="8"
+                max="36"
+                value="16"
+              />
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="sub-product-name">부상품명</label>
+            <textarea
+              id="sub-product-name"
+              name="subProductName"
+              rows="2"
+              placeholder="예: 스페셜티 블렌드 200g"
+            ></textarea>
+            <div class="form-subcontrol">
+              <label for="sub-product-font-size">글자 크기</label>
+              <input
+                id="sub-product-font-size"
+                name="subProductFontSize"
+                type="number"
+                min="8"
+                max="32"
+                value="14"
+              />
+            </div>
           </div>
           <div class="form-row">
             <label for="barcode-value">바코드 값</label>
@@ -49,8 +80,19 @@
               placeholder="예: 8801234567890"
               required
             />
+            <div class="form-subcontrol">
+              <label for="barcode-font-size">글자 크기</label>
+              <input
+                id="barcode-font-size"
+                name="barcodeFontSize"
+                type="number"
+                min="8"
+                max="28"
+                value="12"
+              />
+            </div>
           </div>
-          <div class="grid grid--3">
+          <div class="grid grid--2">
             <div class="form-row">
               <label for="quantity">수량</label>
               <input
@@ -72,19 +114,8 @@
                 <option value="itf14">ITF-14</option>
               </select>
             </div>
-            <div class="form-row">
-              <label for="font-size">글자 크기</label>
-              <input
-                id="font-size"
-                name="fontSize"
-                type="number"
-                min="10"
-                max="24"
-                value="14"
-              />
-            </div>
           </div>
-          <div class="grid grid--3">
+          <div class="grid grid--2">
             <div class="form-row">
               <label for="label-width">라벨 가로 (mm)</label>
               <input
@@ -105,17 +136,6 @@
                 min="20"
                 max="60"
                 value="40"
-              />
-            </div>
-            <div class="form-row">
-              <label for="columns">열 개수</label>
-              <input
-                id="columns"
-                name="columns"
-                type="number"
-                min="1"
-                max="4"
-                value="3"
               />
             </div>
           </div>
