@@ -21,6 +21,13 @@ const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
 const LABEL_LINE_GAP_OVERRIDE_PROPERTY = '--line-gap-override';
 const MIN_BARCODE_HEIGHT_PX = 8;
 
+const BARCODE_TEXT_STYLE_OVERRIDES = {
+  fill: '#111827',
+  fontFamily: "'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+  fontWeight: '600',
+  letterSpacing: '0.08em',
+};
+
 const state = {
   labels: [],
   draft: null,
@@ -129,6 +136,67 @@ function getJsBarcode() {
   return typeof library === 'function' ? library : null;
 }
 
+function parseNumericAttribute(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function applyBarcodeSvgSizing(svg) {
+  if (!svg) {
+    return;
+  }
+
+  const width = parseNumericAttribute(svg.getAttribute('width'));
+  const height = parseNumericAttribute(svg.getAttribute('height'));
+
+  if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  }
+
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('width', '100%');
+  svg.style.width = '100%';
+}
+
+function applyBarcodeTextStyling(svg) {
+  if (!svg) {
+    return;
+  }
+
+  const textElements = svg.querySelectorAll('text');
+  textElements.forEach((element) => {
+    if (!element) {
+      return;
+    }
+
+    element.setAttribute('fill', BARCODE_TEXT_STYLE_OVERRIDES.fill);
+    element.style.setProperty('font-family', BARCODE_TEXT_STYLE_OVERRIDES.fontFamily);
+    element.style.setProperty('font-weight', BARCODE_TEXT_STYLE_OVERRIDES.fontWeight);
+    element.style.setProperty(
+      'letter-spacing',
+      BARCODE_TEXT_STYLE_OVERRIDES.letterSpacing,
+      'important',
+    );
+  });
+}
+
+function applyBarcodeSvgOverrides(svg) {
+  if (!svg) {
+    return;
+  }
+
+  applyBarcodeSvgSizing(svg);
+  applyBarcodeTextStyling(svg);
+}
+
 function renderBarcode(svg, value, options) {
   const JsBarcodeLibrary = getJsBarcode();
   if (!JsBarcodeLibrary) {
@@ -137,6 +205,7 @@ function renderBarcode(svg, value, options) {
 
   try {
     JsBarcodeLibrary(svg, value, options);
+    applyBarcodeSvgOverrides(svg);
     return true;
   } catch (error) {
     // eslint-disable-next-line no-console
