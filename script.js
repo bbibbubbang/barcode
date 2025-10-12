@@ -14,7 +14,6 @@ const STORAGE_KEYS = {
   form: 'barcode-maker:form',
 };
 
-const MAX_HORIZONTAL_OFFSET = 60;
 const LABEL_VERTICAL_PADDING_MM = 4; // 총 상하 패딩 (styles.css와 동일해야 함)
 const LABEL_GAP_MM = 1.3; // 라벨 내부 요소 간 기본 간격 (styles.css와 동일해야 함)
 const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
@@ -266,8 +265,6 @@ function getFormValues() {
     labelHeight: Number(formData.get('labelHeight')),
     showText: formData.get('showText') === 'on',
     includeName: formData.get('includeName') === 'on',
-    horizontalOffset: Number(formData.get('horizontalOffset')),
-    verticalOffset: Number(formData.get('verticalOffset')),
   };
 }
 
@@ -297,8 +294,6 @@ function getDefaults() {
     barcodeFontSize: Number(form.elements.barcodeFontSize?.defaultValue) || 12,
     labelWidth: Number(form.elements.labelWidth?.defaultValue) || 60,
     labelHeight: Number(form.elements.labelHeight?.defaultValue) || 40,
-    horizontalOffset: Number(form.elements.horizontalOffset?.defaultValue) || 0,
-    verticalOffset: Number(form.elements.verticalOffset?.defaultValue) || 0,
   };
 }
 
@@ -331,15 +326,6 @@ function withFallbacks(values) {
       min: 20,
       max: 60,
       fallback: defaults.labelHeight,
-    }),
-    horizontalOffset: normalizeNumber(values.horizontalOffset, {
-      min: 0,
-      max: MAX_HORIZONTAL_OFFSET,
-      fallback: defaults.horizontalOffset,
-    }),
-    verticalOffset: normalizeNumber(values.verticalOffset, {
-      min: 0,
-      fallback: defaults.verticalOffset,
     }),
   };
 }
@@ -399,14 +385,6 @@ function applyFormValues(values) {
     elements.labelHeight.value = values.labelHeight;
   }
 
-  if (Number.isFinite(values.horizontalOffset)) {
-    elements.horizontalOffset.value = values.horizontalOffset;
-  }
-
-  if (Number.isFinite(values.verticalOffset)) {
-    elements.verticalOffset.value = values.verticalOffset;
-  }
-
   if (typeof values.barcodeType === 'string') {
     elements.barcodeType.value = values.barcodeType;
   }
@@ -442,8 +420,6 @@ function restoreLabels() {
             barcodeFontSize: Number(item.barcodeFontSize),
             labelWidth: Number(item.labelWidth),
             labelHeight: Number(item.labelHeight),
-            horizontalOffset: Number(item.horizontalOffset),
-            verticalOffset: Number(item.verticalOffset),
           });
 
           return {
@@ -603,8 +579,6 @@ function startEditingLabel(id) {
     labelHeight: sanitized.labelHeight,
     showText: sanitized.showText,
     includeName: sanitized.includeName,
-    horizontalOffset: sanitized.horizontalOffset,
-    verticalOffset: sanitized.verticalOffset,
   });
 
   renderPreview();
@@ -642,14 +616,6 @@ function handleFormSubmit(event) {
   event.preventDefault();
   const rawValues = getFormValues();
   const formValues = withFallbacks(rawValues);
-
-  if (
-    rawValues.horizontalOffset > MAX_HORIZONTAL_OFFSET &&
-    formValues.horizontalOffset === MAX_HORIZONTAL_OFFSET
-  ) {
-    alert('더 이상 추가할 수 없습니다');
-    form.elements.horizontalOffset.value = MAX_HORIZONTAL_OFFSET;
-  }
 
   if (!formValues.productName || !formValues.barcodeValue) {
     alert('상품명과 바코드 값은 필수 입력 항목입니다.');
@@ -758,8 +724,6 @@ function areLabelsEqual(a, b) {
     'labelHeight',
     'showText',
     'includeName',
-    'horizontalOffset',
-    'verticalOffset',
   ];
 
   return keys.every((key) => a[key] === b[key]);
@@ -831,8 +795,7 @@ function computeBaseBarcodeHeightPx(label) {
       ? 2
       : 1
     : 0;
-  const gapPx = Math.max(gapPxBase - label.verticalOffset, 0);
-  const totalGapPx = gapCount * gapPx;
+  const totalGapPx = gapCount * gapPxBase;
   const reservedForNames = label.includeName
     ? label.productFontSize + (label.subProductName ? label.subProductFontSize : 0)
     : 0;
@@ -1203,8 +1166,6 @@ function createPreviewLabel(label) {
 
   element.style.width = `${mmToPx(label.labelWidth)}px`;
   element.style.height = `${mmToPx(label.labelHeight)}px`;
-  element.style.setProperty('--horizontal-offset', `${label.horizontalOffset}px`);
-  element.style.setProperty('--vertical-offset', `${label.verticalOffset}px`);
 
   if (label.includeName) {
     const name = document.createElement('div');
@@ -1440,8 +1401,6 @@ function buildPrintSheet(labels) {
     item.className = 'print-label';
     item.style.width = `${label.labelWidth}mm`;
     item.style.height = `${label.labelHeight}mm`;
-    item.style.setProperty('--horizontal-offset', `${label.horizontalOffset}px`);
-    item.style.setProperty('--vertical-offset', `${label.verticalOffset}px`);
 
     if (label.includeName) {
       const name = document.createElement('div');
@@ -1593,14 +1552,6 @@ async function handleDownloadPdf() {
 function updateDraft() {
   const rawValues = getFormValues();
   const formValues = withFallbacks(rawValues);
-
-  if (
-    rawValues.horizontalOffset > MAX_HORIZONTAL_OFFSET &&
-    formValues.horizontalOffset === MAX_HORIZONTAL_OFFSET
-  ) {
-    alert('더 이상 추가할 수 없습니다');
-    form.elements.horizontalOffset.value = MAX_HORIZONTAL_OFFSET;
-  }
 
   const hasContent = hasDraftContent(formValues);
 

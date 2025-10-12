@@ -481,18 +481,13 @@ textarea:focus {
 
 .preview-label,
 .print-label {
-  --horizontal-offset: 0px;
-  --vertical-offset: 0px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: var(
-    --label-gap-override,
-    max(0px, calc(1.3mm - var(--vertical-offset)))
-  );
+  gap: var(--label-gap-override, 1.3mm);
   padding-block: 2mm;
-  padding-inline: calc(3mm + var(--horizontal-offset));
+  padding-inline: 3mm;
   border: 1px solid #000;
   background: #fff;
   box-sizing: border-box;
