@@ -17,7 +17,9 @@ const STORAGE_KEYS = {
 const MAX_HORIZONTAL_OFFSET = 60;
 const LABEL_VERTICAL_PADDING_MM = 4; // 총 상하 패딩 (styles.css와 동일해야 함)
 const LABEL_GAP_MM = 1.6; // 라벨 내부 요소 간 기본 간격 (styles.css와 동일해야 함)
-const MIN_BARCODE_HEIGHT_PX = 16;
+const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
+const LABEL_LINE_GAP_OVERRIDE_PROPERTY = '--line-gap-override';
+const MIN_BARCODE_HEIGHT_PX = 8;
 
 const state = {
   labels: [],
@@ -809,6 +811,84 @@ function parseCssNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function removeLineGapOverrides(elements) {
+  if (!Array.isArray(elements) || elements.length === 0) {
+    return;
+  }
+
+  elements.forEach((element) => {
+    if (element && element.style) {
+      element.style.removeProperty(LABEL_LINE_GAP_OVERRIDE_PROPERTY);
+    }
+  });
+}
+
+function applyLineGapCompression(elements, ratio, getComputedStyleFn) {
+  if (!Array.isArray(elements) || elements.length === 0) {
+    return false;
+  }
+
+  if (typeof getComputedStyleFn !== 'function') {
+    return false;
+  }
+
+  const safeRatio = Number.isFinite(ratio)
+    ? Math.max(Math.min(ratio, 1), 0)
+    : 0;
+
+  let applied = false;
+
+  elements.forEach((element) => {
+    if (!element || !element.style) {
+      return;
+    }
+
+    const style = getComputedStyleFn(element);
+    if (!style) {
+      return;
+    }
+
+    const fontSize = parseCssNumber(style.fontSize);
+    let baseLineHeight = Number.parseFloat(element.dataset.baseLineHeight || '');
+
+    if (!Number.isFinite(baseLineHeight) || baseLineHeight <= 0) {
+      const computedLineHeight = parseCssNumber(style.lineHeight);
+
+      if (Number.isFinite(computedLineHeight) && computedLineHeight > 0) {
+        baseLineHeight = computedLineHeight;
+      } else if (Number.isFinite(fontSize) && fontSize > 0) {
+        baseLineHeight = fontSize * 1.2;
+      } else {
+        baseLineHeight = element.offsetHeight;
+      }
+
+      if (Number.isFinite(baseLineHeight) && baseLineHeight > 0) {
+        element.dataset.baseLineHeight = String(baseLineHeight);
+      }
+    }
+
+    if (!Number.isFinite(baseLineHeight) || baseLineHeight <= 0) {
+      return;
+    }
+
+    const minimumLineHeight = Number.isFinite(fontSize) && fontSize > 0
+      ? Math.max(Math.round(fontSize * 0.1), 1)
+      : 1;
+    const targetLineHeight = Math.max(
+      Math.floor(baseLineHeight * safeRatio),
+      minimumLineHeight,
+    );
+
+    element.style.setProperty(
+      LABEL_LINE_GAP_OVERRIDE_PROPERTY,
+      `${targetLineHeight}px`,
+    );
+    applied = true;
+  });
+
+  return applied;
+}
+
 function getBarcodeWrapperClass(element) {
   if (!element) return 'preview-label__barcode';
   return element.classList.contains('print-label')
@@ -851,13 +931,76 @@ function calculateBarcodeAvailableHeight(element, label) {
   }
 
   const textItems = Array.from(element.children).filter((child) => child !== barcodeWrapper);
+  removeLineGapOverrides(textItems);
   const textHeight = textItems.reduce((sum, child) => sum + child.offsetHeight, 0);
-  const gapValue = parseCssNumber(style.rowGap || style.gap);
   const gapCount = textItems.length > 0 ? textItems.length : 0;
-  const available = contentHeight - textHeight - gapValue * gapCount;
+  const currentGapValue = parseCssNumber(style.rowGap || style.gap);
+  const initialAvailable = contentHeight - textHeight - currentGapValue * gapCount;
+  let appliedGapValue = currentGapValue;
+
+  if (gapCount > 0 && Number.isFinite(initialAvailable) && initialAvailable < MIN_BARCODE_HEIGHT_PX) {
+    const safeMaximumGapSpace = Math.max(
+      contentHeight - textHeight - MIN_BARCODE_HEIGHT_PX,
+      0,
+    );
+    const targetGap = Math.floor(safeMaximumGapSpace / gapCount);
+    const normalizedGap = Number.isFinite(targetGap)
+      ? Math.max(targetGap, 0)
+      : 0;
+
+    element.style.setProperty(
+      LABEL_GAP_OVERRIDE_PROPERTY,
+      `${normalizedGap}px`,
+    );
+    appliedGapValue = normalizedGap;
+  } else {
+    element.style.removeProperty(LABEL_GAP_OVERRIDE_PROPERTY);
+    if (gapCount > 0) {
+      const refreshedStyle = getComputedStyleFn(element);
+      if (refreshedStyle) {
+        appliedGapValue = parseCssNumber(refreshedStyle.rowGap || refreshedStyle.gap);
+      }
+    }
+  }
+
+  let effectiveTextHeight = textItems.reduce((sum, child) => sum + child.offsetHeight, 0);
+  let available = contentHeight - effectiveTextHeight - appliedGapValue * gapCount;
 
   if (!Number.isFinite(available)) {
     return null;
+  }
+
+  if (textItems.length > 0 && available < MIN_BARCODE_HEIGHT_PX) {
+    const targetTextSpace = Math.max(
+      contentHeight - appliedGapValue * gapCount - MIN_BARCODE_HEIGHT_PX,
+      0,
+    );
+
+    if (effectiveTextHeight > 0 && targetTextSpace < effectiveTextHeight) {
+      const ratio = targetTextSpace / effectiveTextHeight;
+      const compressed = applyLineGapCompression(
+        textItems,
+        Number.isFinite(ratio) ? ratio : 0,
+        getComputedStyleFn,
+      );
+
+      if (compressed) {
+        effectiveTextHeight = textItems.reduce(
+          (sum, child) => sum + child.offsetHeight,
+          0,
+        );
+        available = contentHeight - effectiveTextHeight - appliedGapValue * gapCount;
+      }
+    } else if (targetTextSpace <= 0) {
+      const compressed = applyLineGapCompression(textItems, 0, getComputedStyleFn);
+      if (compressed) {
+        effectiveTextHeight = textItems.reduce(
+          (sum, child) => sum + child.offsetHeight,
+          0,
+        );
+        available = contentHeight - effectiveTextHeight - appliedGapValue * gapCount;
+      }
+    }
   }
 
   return Math.max(Math.floor(available), 0);
@@ -875,19 +1018,6 @@ function adjustBarcodeHeightForElement(element, label) {
     return false;
   }
 
-  const targetHeight = Math.max(
-    Math.min(baseHeight, availableHeight),
-    Math.min(MIN_BARCODE_HEIGHT_PX, availableHeight),
-  );
-
-  if (!Number.isFinite(targetHeight) || targetHeight <= 0) {
-    return false;
-  }
-
-  if (Math.abs(targetHeight - baseHeight) < 0.5) {
-    return false;
-  }
-
   const barcodeClass = getBarcodeWrapperClass(element);
   const barcodeWrapper = element.querySelector(`.${barcodeClass}`);
   if (!barcodeWrapper) {
@@ -899,7 +1029,69 @@ function adjustBarcodeHeightForElement(element, label) {
     return false;
   }
 
-  return renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label, { heightPx: targetHeight }));
+  const targetHeight = Math.max(
+    Math.min(baseHeight, availableHeight),
+    Math.min(MIN_BARCODE_HEIGHT_PX, availableHeight),
+  );
+
+  if (!Number.isFinite(targetHeight) || targetHeight <= 0) {
+    return false;
+  }
+
+  const roundedTargetHeight = Math.max(Math.floor(targetHeight), 1);
+  const roundedAvailableHeight = Math.max(Math.floor(availableHeight), 1);
+
+  barcodeWrapper.style.maxHeight = `${roundedAvailableHeight}px`;
+  barcodeWrapper.style.setProperty('--barcode-available-height', `${roundedAvailableHeight}px`);
+
+  const rendered = renderBarcode(
+    svg,
+    label.barcodeValue,
+    getBarcodeRenderOptions(label, { heightPx: roundedTargetHeight }),
+  );
+
+  if (!rendered) {
+    return false;
+  }
+
+  svg.style.height = `${roundedTargetHeight}px`;
+  svg.style.maxHeight = `${roundedAvailableHeight}px`;
+  svg.setAttribute('height', `${roundedTargetHeight}`);
+
+  return true;
+}
+
+function adjustActivePreviewBarcode() {
+  const previewLabel = previewContainer.querySelector('.preview-label');
+  if (!previewLabel) {
+    return;
+  }
+
+  const activeLabel = getActivePreviewLabel();
+  if (!activeLabel) {
+    return;
+  }
+
+  adjustBarcodeHeightForElement(previewLabel, activeLabel);
+}
+
+let pendingPreviewAdjustment = null;
+
+function schedulePreviewBarcodeAdjustment() {
+  if (typeof window === 'undefined') {
+    adjustActivePreviewBarcode();
+    return;
+  }
+
+  if (pendingPreviewAdjustment != null) {
+    return;
+  }
+
+  const raf = window.requestAnimationFrame || window.setTimeout;
+  pendingPreviewAdjustment = raf(() => {
+    pendingPreviewAdjustment = null;
+    adjustActivePreviewBarcode();
+  });
 }
 
 function adjustBarcodeHeightsForElements(elements, labels) {
@@ -1027,6 +1219,7 @@ function renderPreview() {
     requestAnimationFrame(() => {
       adjustBarcodeHeightForElement(previewLabel, activeLabel);
     });
+    schedulePreviewBarcodeAdjustment();
   }
 }
 
@@ -1379,6 +1572,29 @@ function init() {
 
   if (restoredFormValues && hasDraftContent(restoredFormValues)) {
     updateDraft();
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', schedulePreviewBarcodeAdjustment);
+  }
+
+  if (document && document.fonts) {
+    const { fonts } = document;
+
+    if (typeof fonts.addEventListener === 'function') {
+      fonts.addEventListener('loadingdone', schedulePreviewBarcodeAdjustment);
+      fonts.addEventListener('loadingerror', schedulePreviewBarcodeAdjustment);
+    }
+
+    if (fonts.ready && typeof fonts.ready.then === 'function') {
+      fonts.ready
+        .then(() => {
+          schedulePreviewBarcodeAdjustment();
+        })
+        .catch(() => {
+          schedulePreviewBarcodeAdjustment();
+        });
+    }
   }
 }
 

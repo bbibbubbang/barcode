@@ -487,7 +487,10 @@ textarea:focus {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: max(0px, calc(1.6mm - var(--vertical-offset)));
+  gap: var(
+    --label-gap-override,
+    max(0px, calc(1.6mm - var(--vertical-offset)))
+  );
   padding-block: 2mm;
   padding-inline: calc(3mm + var(--horizontal-offset));
   border: 1px solid #000;
@@ -503,6 +506,7 @@ textarea:focus {
   text-align: center;
   white-space: pre-line;
   color: #111827;
+  line-height: var(--line-gap-override, 1.25);
 }
 
 .preview-label__subname,
@@ -512,6 +516,7 @@ textarea:focus {
   margin: 0;
   text-align: center;
   white-space: pre-line;
+  line-height: var(--line-gap-override, 1.25);
 }
 
 .preview-label__barcode,
