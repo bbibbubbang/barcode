@@ -416,16 +416,51 @@ textarea:focus {
 }
 
 .preview__sheet {
-  box-sizing: border-box;
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  padding: 32px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(235, 240, 255, 0.7));
+  border: 1px solid rgba(27, 36, 48, 0.12);
+  box-shadow: 0 28px 54px -32px rgba(19, 33, 68, 0.45);
+  min-width: var(--sheet-width);
+  min-height: calc(var(--sheet-height) + 64px);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.preview__sheet::after {
+  content: attr(data-dimensions);
+  position: absolute;
+  bottom: 16px;
+  right: 24px;
+  font-size: 0.75rem;
+  color: rgba(27, 36, 48, 0.56);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.preview__sheet-area {
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sheet-width);
+  height: var(--sheet-height);
+  border-radius: calc(var(--radius-md) - 4px);
+  background: #ffffff;
+  border: 1px dashed rgba(27, 36, 48, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(27, 36, 48, 0.06);
 }
 
 .preview__group {
   display: grid;
   width: 100%;
+  height: 100%;
   justify-content: center;
+  align-content: center;
 }
 
 .label-preview__empty {
@@ -487,6 +522,7 @@ textarea:focus {
   margin-bottom: calc(2mm - var(--vertical-offset));
   text-align: center;
   white-space: pre-line;
+  color: #111827;
 }
 
 .preview-label__subname,
@@ -507,6 +543,14 @@ textarea:focus {
 .print-label__barcode svg {
   width: 100%;
   height: auto;
+}
+
+.preview-label__barcode svg text,
+.print-label__barcode svg text {
+  fill: #111827 !important;
+  font-family: 'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .print-sheet__group {
