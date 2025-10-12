@@ -743,6 +743,25 @@ function getActivePreviewLabel() {
   return activeLabel;
 }
 
+function getBarcodeRenderOptions(label) {
+  const baseHeightPx = mmToPx(label.labelHeight);
+  const reservedForNames = label.includeName
+    ? label.productFontSize + (label.subProductName ? label.subProductFontSize : 0)
+    : 0;
+  const reservedForText = label.showText ? label.barcodeFontSize * 1.6 : 0;
+  const availableHeight = Math.max(baseHeightPx - reservedForNames - reservedForText, 32);
+
+  return {
+    format: mapBarcodeType(label.barcodeType),
+    displayValue: label.showText,
+    fontSize: label.barcodeFontSize,
+    height: Math.max(Math.round(availableHeight), 32),
+    margin: 0,
+    textMargin: label.showText ? Math.max(Math.round(label.barcodeFontSize / 3), 4) : 0,
+    lineColor: '#111827',
+  };
+}
+
 function createPreviewLabel(label) {
   const element = document.createElement('div');
   element.className = 'preview-label';
@@ -775,13 +794,7 @@ function createPreviewLabel(label) {
   element.appendChild(barcodeWrapper);
 
   if (label.barcodeValue) {
-    const rendered = renderBarcode(svg, label.barcodeValue, {
-      format: mapBarcodeType(label.barcodeType),
-      displayValue: label.showText,
-      fontSize: label.barcodeFontSize,
-      height: label.labelHeight * 2.2,
-      margin: 0,
-    });
+    const rendered = renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label));
 
     if (!rendered) {
       barcodeWrapper.innerHTML = `<p class="label-preview__empty">바코드 스크립트를 불러오지 못했습니다.<br />인터넷 연결을 확인하거나 새로고침 후 다시 시도해주세요.</p>`;
@@ -815,6 +828,7 @@ function renderPreview() {
 
   const sheet = document.createElement('div');
   sheet.className = 'preview__sheet';
+  sheet.dataset.dimensions = `${activeLabel.labelWidth}mm × ${activeLabel.labelHeight}mm`;
 
   const group = document.createElement('div');
   group.className = 'preview__group';
@@ -824,15 +838,20 @@ function renderPreview() {
 
   const previewLabel = createPreviewLabel(activeLabel);
   group.appendChild(previewLabel);
-  sheet.appendChild(group);
+
+  const sheetArea = document.createElement('div');
+  sheetArea.className = 'preview__sheet-area';
+  sheetArea.style.width = `${mmToPx(activeLabel.labelWidth)}px`;
+  sheetArea.style.height = `${mmToPx(activeLabel.labelHeight)}px`;
+  sheetArea.appendChild(group);
+
+  sheet.appendChild(sheetArea);
 
   const sheetWidthPx = mmToPx(activeLabel.labelWidth);
   const sheetHeightPx = mmToPx(activeLabel.labelHeight);
 
-  sheet.style.width = `${sheetWidthPx}px`;
-  sheet.style.minWidth = `${sheetWidthPx}px`;
-  sheet.style.minHeight = `${sheetHeightPx}px`;
-  sheet.style.padding = '0px';
+  sheet.style.setProperty('--sheet-width', `${sheetWidthPx}px`);
+  sheet.style.setProperty('--sheet-height', `${sheetHeightPx}px`);
 
   previewContainer.appendChild(sheet);
 }
@@ -989,13 +1008,7 @@ function buildPrintSheet(labels) {
     barcodeWrapper.appendChild(svg);
     item.appendChild(barcodeWrapper);
 
-    const rendered = renderBarcode(svg, label.barcodeValue, {
-      format: mapBarcodeType(label.barcodeType),
-      displayValue: label.showText,
-      fontSize: label.barcodeFontSize,
-      height: label.labelHeight * 2.2,
-      margin: 0,
-    });
+    const rendered = renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label));
 
     if (!rendered) {
       barcodeWrapper.innerHTML = '<p>바코드 생성 오류</p>';
