@@ -17,6 +17,7 @@ const STORAGE_KEYS = {
 const MAX_HORIZONTAL_OFFSET = 60;
 const LABEL_VERTICAL_PADDING_MM = 4; // 총 상하 패딩 (styles.css와 동일해야 함)
 const LABEL_GAP_MM = 1.6; // 라벨 내부 요소 간 기본 간격 (styles.css와 동일해야 함)
+const MIN_BARCODE_HEIGHT_PX = 16;
 
 const state = {
   labels: [],
@@ -745,7 +746,7 @@ function getActivePreviewLabel() {
   return activeLabel;
 }
 
-function getBarcodeRenderOptions(label) {
+function computeBaseBarcodeHeightPx(label) {
   const baseHeightPx = mmToPx(label.labelHeight);
   const verticalPaddingPx = mmToPx(LABEL_VERTICAL_PADDING_MM);
   const gapPxBase = mmToPx(LABEL_GAP_MM);
@@ -762,18 +763,167 @@ function getBarcodeRenderOptions(label) {
   const reservedForText = label.showText ? label.barcodeFontSize * 1.6 : 0;
   const availableHeight = Math.max(
     baseHeightPx - verticalPaddingPx - reservedForNames - reservedForText - totalGapPx,
-    32,
+    MIN_BARCODE_HEIGHT_PX,
   );
+
+  return Math.max(Math.round(availableHeight), MIN_BARCODE_HEIGHT_PX);
+}
+
+function getBarcodeRenderOptions(label, options = {}) {
+  const baseHeight = computeBaseBarcodeHeightPx(label);
+  const { heightPx = null } = options;
+  let targetHeight = baseHeight;
+
+  if (Number.isFinite(heightPx)) {
+    const safeHeight = Math.floor(heightPx);
+    const lowerBound = Math.min(MIN_BARCODE_HEIGHT_PX, safeHeight);
+    targetHeight = Math.max(
+      Math.min(baseHeight, safeHeight),
+      Number.isFinite(lowerBound) ? lowerBound : MIN_BARCODE_HEIGHT_PX,
+    );
+  }
+
+  const safeTargetHeight = Number.isFinite(targetHeight)
+    ? targetHeight
+    : MIN_BARCODE_HEIGHT_PX;
+  const minClamp = Math.min(MIN_BARCODE_HEIGHT_PX, safeTargetHeight);
+  const heightValue = Math.max(Math.round(safeTargetHeight), Math.round(minClamp));
 
   return {
     format: mapBarcodeType(label.barcodeType),
     displayValue: label.showText,
     fontSize: label.barcodeFontSize,
-    height: Math.max(Math.round(availableHeight), 32),
+    height: Math.max(heightValue, 1),
     margin: 0,
     textMargin: label.showText ? Math.max(Math.round(label.barcodeFontSize / 3), 4) : 0,
     lineColor: '#111827',
   };
+}
+
+function parseCssNumber(value) {
+  if (typeof value !== 'string') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getBarcodeWrapperClass(element) {
+  if (!element) return 'preview-label__barcode';
+  return element.classList.contains('print-label')
+    ? 'print-label__barcode'
+    : 'preview-label__barcode';
+}
+
+function calculateBarcodeAvailableHeight(element, label) {
+  if (!element || !label || !label.barcodeValue || !element.isConnected) {
+    return null;
+  }
+
+  const getComputedStyleFn = globalThis.getComputedStyle;
+  if (typeof getComputedStyleFn !== 'function') {
+    return null;
+  }
+
+  const style = getComputedStyleFn(element);
+  if (!style) {
+    return null;
+  }
+
+  const paddingTop = parseCssNumber(style.paddingTop);
+  const paddingBottom = parseCssNumber(style.paddingBottom);
+  const clientHeight = element.clientHeight;
+
+  if (!Number.isFinite(clientHeight)) {
+    return null;
+  }
+
+  const contentHeight = clientHeight - paddingTop - paddingBottom;
+  if (!Number.isFinite(contentHeight) || contentHeight <= 0) {
+    return null;
+  }
+
+  const barcodeClass = getBarcodeWrapperClass(element);
+  const barcodeWrapper = element.querySelector(`.${barcodeClass}`);
+  if (!barcodeWrapper) {
+    return null;
+  }
+
+  const textItems = Array.from(element.children).filter((child) => child !== barcodeWrapper);
+  const textHeight = textItems.reduce((sum, child) => sum + child.offsetHeight, 0);
+  const gapValue = parseCssNumber(style.rowGap || style.gap);
+  const gapCount = textItems.length > 0 ? textItems.length : 0;
+  const available = contentHeight - textHeight - gapValue * gapCount;
+
+  if (!Number.isFinite(available)) {
+    return null;
+  }
+
+  return Math.max(Math.floor(available), 0);
+}
+
+function adjustBarcodeHeightForElement(element, label) {
+  if (!element || !label || !label.barcodeValue) {
+    return false;
+  }
+
+  const baseHeight = computeBaseBarcodeHeightPx(label);
+  const availableHeight = calculateBarcodeAvailableHeight(element, label);
+
+  if (!Number.isFinite(availableHeight) || availableHeight <= 0) {
+    return false;
+  }
+
+  const targetHeight = Math.max(
+    Math.min(baseHeight, availableHeight),
+    Math.min(MIN_BARCODE_HEIGHT_PX, availableHeight),
+  );
+
+  if (!Number.isFinite(targetHeight) || targetHeight <= 0) {
+    return false;
+  }
+
+  if (Math.abs(targetHeight - baseHeight) < 0.5) {
+    return false;
+  }
+
+  const barcodeClass = getBarcodeWrapperClass(element);
+  const barcodeWrapper = element.querySelector(`.${barcodeClass}`);
+  if (!barcodeWrapper) {
+    return false;
+  }
+
+  const svg = barcodeWrapper.querySelector('svg');
+  if (!svg) {
+    return false;
+  }
+
+  return renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label, { heightPx: targetHeight }));
+}
+
+function adjustBarcodeHeightsForElements(elements, labels) {
+  if (!Array.isArray(elements) || !Array.isArray(labels)) {
+    return;
+  }
+
+  const count = Math.min(elements.length, labels.length);
+  for (let index = 0; index < count; index += 1) {
+    adjustBarcodeHeightForElement(elements[index], labels[index]);
+  }
+}
+
+function waitForNextFrame() {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      resolve();
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      resolve();
+    });
+  });
 }
 
 function createPreviewLabel(label) {
@@ -872,6 +1022,12 @@ function renderPreview() {
   sheet.appendChild(group);
 
   previewContainer.appendChild(sheet);
+
+  if (activeLabel.barcodeValue) {
+    requestAnimationFrame(() => {
+      adjustBarcodeHeightForElement(previewLabel, activeLabel);
+    });
+  }
 }
 
 function getPreviewLabelDescription(label, index, total) {
@@ -978,6 +1134,7 @@ function mapBarcodeType(type) {
 function buildPrintSheet(labels) {
   const sheet = document.createElement('div');
   sheet.className = 'print-sheet';
+  const labelElements = [];
 
   const pageSize = getPrintPageSizeFromLabels(labels, { warn: false });
   if (pageSize) {
@@ -1035,9 +1192,10 @@ function buildPrintSheet(labels) {
     group.appendChild(item);
 
     sheet.appendChild(group);
+    labelElements.push(item);
   });
 
-  return sheet;
+  return { sheet, labelElements };
 }
 
 function getPrintableLabels() {
@@ -1056,11 +1214,12 @@ function handlePrint() {
   applyPrintPageSizeFromLabels(printableLabels);
 
   printRoot.innerHTML = '';
-  const sheet = buildPrintSheet(printableLabels);
+  const { sheet, labelElements } = buildPrintSheet(printableLabels);
   printRoot.appendChild(sheet);
   printRoot.setAttribute('data-printing', 'true');
 
   requestAnimationFrame(() => {
+    adjustBarcodeHeightsForElements(labelElements, printableLabels);
     requestAnimationFrame(() => {
       window.print();
     });
@@ -1098,11 +1257,15 @@ async function handleDownloadPdf() {
   exportContainer.style.zIndex = '-1';
   exportContainer.setAttribute('aria-hidden', 'true');
 
-  const sheet = buildPrintSheet(printableLabels);
+  const { sheet, labelElements } = buildPrintSheet(printableLabels);
   exportContainer.appendChild(sheet);
   document.body.appendChild(exportContainer);
 
   try {
+    await waitForNextFrame();
+    adjustBarcodeHeightsForElements(labelElements, printableLabels);
+    await waitForNextFrame();
+
     const canvas = await html2canvas(sheet, {
       backgroundColor: '#ffffff',
       scale: 2,
@@ -1226,8 +1389,20 @@ window.addEventListener('beforeprint', () => {
   applyPrintPageSizeFromLabels(printableLabels);
 
   if (printRoot.childElementCount === 0) {
-    const sheet = buildPrintSheet(printableLabels);
+    const { sheet, labelElements } = buildPrintSheet(printableLabels);
     printRoot.appendChild(sheet);
+    adjustBarcodeHeightsForElements(labelElements, printableLabels);
+    requestAnimationFrame(() => {
+      adjustBarcodeHeightsForElements(labelElements, printableLabels);
+    });
+  } else {
+    const existingElements = Array.from(printRoot.querySelectorAll('.print-label'));
+    if (existingElements.length > 0) {
+      adjustBarcodeHeightsForElements(existingElements, printableLabels);
+      requestAnimationFrame(() => {
+        adjustBarcodeHeightsForElements(existingElements, printableLabels);
+      });
+    }
   }
 
   printRoot.setAttribute('data-printing', 'true');
