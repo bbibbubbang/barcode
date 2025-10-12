@@ -814,6 +814,10 @@ function renderPreview() {
   if (previewLabels.length === 0 || !activeLabel) {
     renderLabelList(null);
     renderPreviewPagination(previewLabels, activeIndex);
+    previewContainer.style.removeProperty('--sheet-width');
+    previewContainer.style.removeProperty('--sheet-height');
+    previewContainer.style.minHeight = '';
+    previewContainer.style.minWidth = '';
     previewContainer.innerHTML = `
       <div class="label-preview__empty">
         <p>왼쪽에서 라벨 정보를 추가하면 미리보기가 표시됩니다.</p>
@@ -828,7 +832,6 @@ function renderPreview() {
 
   const sheet = document.createElement('div');
   sheet.className = 'preview__sheet';
-  sheet.dataset.dimensions = `${activeLabel.labelWidth}mm × ${activeLabel.labelHeight}mm`;
 
   const group = document.createElement('div');
   group.className = 'preview__group';
@@ -839,19 +842,20 @@ function renderPreview() {
   const previewLabel = createPreviewLabel(activeLabel);
   group.appendChild(previewLabel);
 
-  const sheetArea = document.createElement('div');
-  sheetArea.className = 'preview__sheet-area';
-  sheetArea.style.width = `${mmToPx(activeLabel.labelWidth)}px`;
-  sheetArea.style.height = `${mmToPx(activeLabel.labelHeight)}px`;
-  sheetArea.appendChild(group);
-
-  sheet.appendChild(sheetArea);
-
   const sheetWidthPx = mmToPx(activeLabel.labelWidth);
   const sheetHeightPx = mmToPx(activeLabel.labelHeight);
 
+  sheet.style.width = `${sheetWidthPx}px`;
+  sheet.style.height = `${sheetHeightPx}px`;
   sheet.style.setProperty('--sheet-width', `${sheetWidthPx}px`);
   sheet.style.setProperty('--sheet-height', `${sheetHeightPx}px`);
+
+  previewContainer.style.setProperty('--sheet-width', `${sheetWidthPx}px`);
+  previewContainer.style.setProperty('--sheet-height', `${sheetHeightPx}px`);
+  previewContainer.style.minHeight = `${sheetHeightPx}px`;
+  previewContainer.style.minWidth = `${sheetWidthPx}px`;
+
+  sheet.appendChild(group);
 
   previewContainer.appendChild(sheet);
 }
