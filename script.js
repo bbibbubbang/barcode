@@ -703,6 +703,11 @@ function removeLabel(id) {
   const index = state.labels.findIndex((label) => label.id === id);
   if (index === -1) return;
 
+  const shouldRemove = confirm('선택한 라벨을 삭제할까요?');
+  if (!shouldRemove) {
+    return;
+  }
+
   state.labels.splice(index, 1);
   persistLabels();
 
