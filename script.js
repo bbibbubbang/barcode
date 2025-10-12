@@ -16,7 +16,7 @@ const STORAGE_KEYS = {
 
 const MAX_HORIZONTAL_OFFSET = 60;
 const LABEL_VERTICAL_PADDING_MM = 4; // 총 상하 패딩 (styles.css와 동일해야 함)
-const LABEL_GAP_MM = 1.6; // 라벨 내부 요소 간 기본 간격 (styles.css와 동일해야 함)
+const LABEL_GAP_MM = 1.3; // 라벨 내부 요소 간 기본 간격 (styles.css와 동일해야 함)
 const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
 const LABEL_LINE_GAP_OVERRIDE_PROPERTY = '--line-gap-override';
 const MIN_BARCODE_HEIGHT_PX = 8;
@@ -831,7 +831,7 @@ function computeBaseBarcodeHeightPx(label) {
   const reservedForNames = label.includeName
     ? label.productFontSize + (label.subProductName ? label.subProductFontSize : 0)
     : 0;
-  const reservedForText = label.showText ? label.barcodeFontSize * 1.6 : 0;
+  const reservedForText = label.showText ? label.barcodeFontSize * 1.4 : 0;
   const availableHeight = Math.max(
     baseHeightPx - verticalPaddingPx - reservedForNames - reservedForText - totalGapPx,
     MIN_BARCODE_HEIGHT_PX,
@@ -847,26 +847,24 @@ function getBarcodeRenderOptions(label, options = {}) {
 
   if (Number.isFinite(heightPx)) {
     const safeHeight = Math.floor(heightPx);
-    const lowerBound = Math.min(MIN_BARCODE_HEIGHT_PX, safeHeight);
     targetHeight = Math.max(
       Math.min(baseHeight, safeHeight),
-      Number.isFinite(lowerBound) ? lowerBound : MIN_BARCODE_HEIGHT_PX,
+      MIN_BARCODE_HEIGHT_PX,
     );
   }
 
   const safeTargetHeight = Number.isFinite(targetHeight)
-    ? targetHeight
+    ? Math.max(targetHeight, MIN_BARCODE_HEIGHT_PX)
     : MIN_BARCODE_HEIGHT_PX;
-  const minClamp = Math.min(MIN_BARCODE_HEIGHT_PX, safeTargetHeight);
-  const heightValue = Math.max(Math.round(safeTargetHeight), Math.round(minClamp));
+  const heightValue = Math.max(Math.round(safeTargetHeight), MIN_BARCODE_HEIGHT_PX);
 
   return {
     format: mapBarcodeType(label.barcodeType),
-    displayValue: label.showText,
+    displayValue: false,
     fontSize: label.barcodeFontSize,
     height: Math.max(heightValue, 1),
     margin: 0,
-    textMargin: label.showText ? Math.max(Math.round(label.barcodeFontSize / 3), 4) : 0,
+    textMargin: 0,
     lineColor: '#111827',
   };
 }
@@ -1072,7 +1070,9 @@ function calculateBarcodeAvailableHeight(element, label) {
     }
   }
 
-  return Math.max(Math.floor(available), 0);
+  const normalizedAvailable = Math.max(Math.floor(available), MIN_BARCODE_HEIGHT_PX);
+
+  return normalizedAvailable;
 }
 
 function adjustBarcodeHeightForElement(element, label) {
@@ -1098,17 +1098,22 @@ function adjustBarcodeHeightForElement(element, label) {
     return false;
   }
 
+  const normalizedAvailableHeight = Math.max(
+    Math.floor(availableHeight),
+    MIN_BARCODE_HEIGHT_PX,
+  );
+
   const targetHeight = Math.max(
-    Math.min(baseHeight, availableHeight),
-    Math.min(MIN_BARCODE_HEIGHT_PX, availableHeight),
+    Math.min(baseHeight, normalizedAvailableHeight),
+    MIN_BARCODE_HEIGHT_PX,
   );
 
   if (!Number.isFinite(targetHeight) || targetHeight <= 0) {
     return false;
   }
 
-  const roundedTargetHeight = Math.max(Math.floor(targetHeight), 1);
-  const roundedAvailableHeight = Math.max(Math.floor(availableHeight), 1);
+  const roundedTargetHeight = Math.max(Math.floor(targetHeight), MIN_BARCODE_HEIGHT_PX);
+  const roundedAvailableHeight = Math.max(normalizedAvailableHeight, MIN_BARCODE_HEIGHT_PX);
 
   barcodeWrapper.style.maxHeight = `${roundedAvailableHeight}px`;
   barcodeWrapper.style.setProperty('--barcode-available-height', `${roundedAvailableHeight}px`);
@@ -1218,7 +1223,9 @@ function createPreviewLabel(label) {
   barcodeWrapper.appendChild(svg);
   element.appendChild(barcodeWrapper);
 
-  if (label.barcodeValue) {
+  const hasBarcodeValue = Boolean(label.barcodeValue);
+
+  if (hasBarcodeValue) {
     const rendered = renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label));
 
     if (!rendered) {
@@ -1227,6 +1234,14 @@ function createPreviewLabel(label) {
   } else {
     barcodeWrapper.innerHTML =
       '<p class="label-preview__empty">바코드 값을 입력하면 미리보기를 확인할 수 있습니다.</p>';
+  }
+
+  if (label.showText && hasBarcodeValue) {
+    const barcodeText = document.createElement('div');
+    barcodeText.className = 'preview-label__barcode-text';
+    barcodeText.style.fontSize = `${label.barcodeFontSize}px`;
+    barcodeText.textContent = label.barcodeValue;
+    element.appendChild(barcodeText);
   }
 
   return element;
@@ -1449,6 +1464,14 @@ function buildPrintSheet(labels) {
 
     if (!rendered) {
       barcodeWrapper.innerHTML = '<p>바코드 생성 오류</p>';
+    }
+
+    if (label.showText && label.barcodeValue) {
+      const barcodeText = document.createElement('div');
+      barcodeText.className = 'print-label__barcode-text';
+      barcodeText.style.fontSize = `${label.barcodeFontSize}px`;
+      barcodeText.textContent = label.barcodeValue;
+      item.appendChild(barcodeText);
     }
 
     group.appendChild(item);
