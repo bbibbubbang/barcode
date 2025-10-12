@@ -15,6 +15,8 @@ const STORAGE_KEYS = {
 };
 
 const MAX_HORIZONTAL_OFFSET = 60;
+const LABEL_VERTICAL_PADDING_MM = 4; // 총 상하 패딩 (styles.css와 동일해야 함)
+const LABEL_GAP_MM = 1.6; // 라벨 내부 요소 간 기본 간격 (styles.css와 동일해야 함)
 
 const state = {
   labels: [],
@@ -745,11 +747,23 @@ function getActivePreviewLabel() {
 
 function getBarcodeRenderOptions(label) {
   const baseHeightPx = mmToPx(label.labelHeight);
+  const verticalPaddingPx = mmToPx(LABEL_VERTICAL_PADDING_MM);
+  const gapPxBase = mmToPx(LABEL_GAP_MM);
+  const gapCount = label.includeName
+    ? label.subProductName
+      ? 2
+      : 1
+    : 0;
+  const gapPx = Math.max(gapPxBase - label.verticalOffset, 0);
+  const totalGapPx = gapCount * gapPx;
   const reservedForNames = label.includeName
     ? label.productFontSize + (label.subProductName ? label.subProductFontSize : 0)
     : 0;
   const reservedForText = label.showText ? label.barcodeFontSize * 1.6 : 0;
-  const availableHeight = Math.max(baseHeightPx - reservedForNames - reservedForText, 32);
+  const availableHeight = Math.max(
+    baseHeightPx - verticalPaddingPx - reservedForNames - reservedForText - totalGapPx,
+    32,
+  );
 
   return {
     format: mapBarcodeType(label.barcodeType),
