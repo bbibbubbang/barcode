@@ -70,7 +70,9 @@ a {
 }
 
 .preview {
-  background: transparent;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 16px 40px -32px rgba(27, 41, 89, 0.4);
 }
 
 .controls h2,
