@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://bbibbubbang.github.io/barcode/sitemap.xml
