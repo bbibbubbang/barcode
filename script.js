@@ -1972,7 +1972,10 @@ async function generateLabelsPdfBlob(labels) {
     throw error;
   }
 
-  const fontEmbedOptions = { subset: true };
+  // 부분 폰트 서브셋(subset)으로는 일부 한글 글자가 누락되는 경우가 있어
+  // 전체 글리프를 포함하도록 설정합니다. 파일 용량은 조금 증가하지만 PDF
+  // 내에서 글자가 빠지지 않도록 보장하는 것이 우선입니다.
+  const fontEmbedOptions = { subset: false };
   const fontRegular = fontRegularBytes
     ? await pdfDoc.embedFont(fontRegularBytes, fontEmbedOptions)
     : await pdfDoc.embedFont(StandardFonts.Helvetica);
