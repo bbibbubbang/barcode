@@ -18,10 +18,16 @@ const STORAGE_KEYS = {
 };
 
 const LABEL_VERTICAL_PADDING_MM = 4; // 총 상하 패딩 (styles.css와 동일해야 함)
+const LABEL_HORIZONTAL_PADDING_MM = 6; // 총 좌우 패딩 (styles.css와 동일해야 함)
 const LABEL_GAP_MM = 1.3; // 라벨 내부 요소 간 기본 간격 (styles.css와 동일해야 함)
 const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
 const LABEL_LINE_GAP_OVERRIDE_PROPERTY = '--line-gap-override';
 const MIN_BARCODE_HEIGHT_PX = 8;
+const LINE_HEIGHT_RATIO = 1.2;
+const BARCODE_CANVAS_SCALE = 2;
+
+const PDF_LIB_SOURCE_URL =
+  'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
 
 const BARCODE_TEXT_STYLE_OVERRIDES = {
   fill: '#111827',
@@ -59,8 +65,18 @@ function updateFormEditingState() {
 }
 
 const MM_TO_PX = 96 / 25.4;
+const MM_TO_PT = 72 / 25.4;
+const PX_TO_PT = 72 / 96;
 function mmToPx(mm) {
   return mm * MM_TO_PX;
+}
+
+function mmToPt(mm) {
+  return mm * MM_TO_PT;
+}
+
+function pxToPt(px) {
+  return px * PX_TO_PT;
 }
 
 function getPrintPageSizeFromLabels(labels, options = {}) {
@@ -1556,6 +1572,393 @@ function getPrintableLabels() {
   return labels.filter((label) => label && hasDraftContent(label));
 }
 
+let pdfLibLoadingPromise = null;
+
+function getLoadedPdfLib() {
+  if (typeof globalThis === 'undefined') {
+    return null;
+  }
+
+  const library = globalThis.PDFLib;
+  if (!library || !library.PDFDocument) {
+    return null;
+  }
+
+  return library;
+}
+
+function loadPdfLib() {
+  const existing = getLoadedPdfLib();
+  if (existing) {
+    return Promise.resolve(existing);
+  }
+
+  if (!pdfLibLoadingPromise) {
+    pdfLibLoadingPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = PDF_LIB_SOURCE_URL;
+      script.async = true;
+      script.onload = () => {
+        const library = getLoadedPdfLib();
+        if (library) {
+          resolve(library);
+          return;
+        }
+
+        reject(new Error('PDF 라이브러리를 초기화하지 못했습니다.'));
+      };
+      script.onerror = () => {
+        reject(new Error('PDF 라이브러리를 불러오는 중 오류가 발생했습니다.'));
+      };
+      document.head.appendChild(script);
+    }).catch((error) => {
+      pdfLibLoadingPromise = null;
+      throw error;
+    });
+  }
+
+  return pdfLibLoadingPromise;
+}
+
+function dataUrlToUint8Array(dataUrl) {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+    return null;
+  }
+
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) {
+    return null;
+  }
+
+  const base64 = dataUrl.slice(commaIndex + 1);
+  const binary = globalThis.atob ? globalThis.atob(base64) : null;
+  if (!binary) {
+    return null;
+  }
+
+  const length = binary.length;
+  const bytes = new Uint8Array(length);
+  for (let i = 0; i < length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
+function splitIntoLines(value) {
+  if (typeof value !== 'string') {
+    if (value == null) {
+      return [];
+    }
+
+    return [`${value}`];
+  }
+
+  if (value === '') {
+    return [''];
+  }
+
+  return value.split(/\r?\n/);
+}
+
+function drawCenteredTextBlock({
+  page,
+  lines,
+  font,
+  fontSizePx,
+  color,
+  cursorY,
+  leftPaddingPt,
+  usableWidthPt,
+}) {
+  const safeLines = Array.isArray(lines) && lines.length > 0 ? lines : [''];
+  const baseFontSizePx = Number(fontSizePx);
+  const safeFontSizePx = Number.isFinite(baseFontSizePx)
+    ? Math.max(baseFontSizePx, 1)
+    : 12;
+  const sizePt = pxToPt(safeFontSizePx);
+  const lineHeightPt = sizePt * LINE_HEIGHT_RATIO;
+  let nextCursorY = cursorY;
+
+  safeLines.forEach((line, index) => {
+    const text = typeof line === 'string' ? line : `${line ?? ''}`;
+    nextCursorY -= sizePt;
+
+    const textWidth = font.widthOfTextAtSize(text, sizePt);
+    const centeredX = leftPaddingPt + Math.max((usableWidthPt - textWidth) / 2, 0);
+
+    page.drawText(text, {
+      x: centeredX,
+      y: nextCursorY,
+      size: sizePt,
+      font,
+      color,
+    });
+
+    if (index < safeLines.length - 1) {
+      nextCursorY -= lineHeightPt - sizePt;
+    }
+  });
+
+  return nextCursorY;
+}
+
+function createBarcodeImageForPdf(label, widthPx, heightPx) {
+  const JsBarcodeLibrary = getJsBarcode();
+  if (!JsBarcodeLibrary || !label || !label.barcodeValue) {
+    return null;
+  }
+
+  const safeWidth = Math.max(Math.floor(widthPx), 1);
+  const safeHeight = Math.max(Math.floor(heightPx), MIN_BARCODE_HEIGHT_PX);
+  const canvas = document.createElement('canvas');
+  const scaledWidth = Math.max(Math.floor(safeWidth * BARCODE_CANVAS_SCALE), 1);
+  const scaledHeight = Math.max(Math.floor(safeHeight * BARCODE_CANVAS_SCALE), 1);
+
+  canvas.width = scaledWidth;
+  canvas.height = scaledHeight;
+
+  const context = canvas.getContext('2d');
+  if (context && BARCODE_CANVAS_SCALE !== 1) {
+    context.scale(BARCODE_CANVAS_SCALE, BARCODE_CANVAS_SCALE);
+  }
+
+  try {
+    JsBarcodeLibrary(
+      canvas,
+      label.barcodeValue,
+      {
+        ...getBarcodeRenderOptions(label, { heightPx: safeHeight }),
+        margin: 0,
+      },
+    );
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('PDF용 바코드 생성 중 오류가 발생했습니다.', error);
+    return null;
+  }
+
+  const bytes = dataUrlToUint8Array(canvas.toDataURL('image/png'));
+  if (!bytes) {
+    return null;
+  }
+
+  return {
+    bytes,
+    width: canvas.width,
+    height: canvas.height,
+  };
+}
+
+async function drawBarcodeBlock({
+  page,
+  pdfDoc,
+  label,
+  cursorY,
+  leftPaddingPt,
+  usableWidthPt,
+  fallbackFont,
+  color,
+}) {
+  const includeBarcode = Boolean(label.barcodeValue);
+
+  if (!includeBarcode) {
+    return drawCenteredTextBlock({
+      page,
+      lines: ['바코드 생성 오류'],
+      font: fallbackFont,
+      fontSizePx: 12,
+      color,
+      cursorY,
+      leftPaddingPt,
+      usableWidthPt,
+    });
+  }
+
+  const availableWidthMm = Math.max(Number(label.labelWidth) - LABEL_HORIZONTAL_PADDING_MM, 1);
+  const availableWidthPx = Math.max(Math.round(mmToPx(availableWidthMm)), 1);
+  const barcodeHeightPx = Math.max(Math.round(computeBaseBarcodeHeightPx(label)), MIN_BARCODE_HEIGHT_PX);
+  const barcodeImage = createBarcodeImageForPdf(label, availableWidthPx, barcodeHeightPx);
+
+  if (!barcodeImage) {
+    return drawCenteredTextBlock({
+      page,
+      lines: ['바코드 생성 오류'],
+      font: fallbackFont,
+      fontSizePx: 12,
+      color,
+      cursorY,
+      leftPaddingPt,
+      usableWidthPt,
+    });
+  }
+
+  const image = await pdfDoc.embedPng(barcodeImage.bytes);
+
+  if (!image || image.width === 0 || image.height === 0) {
+    return drawCenteredTextBlock({
+      page,
+      lines: ['바코드 생성 오류'],
+      font: fallbackFont,
+      fontSizePx: 12,
+      color,
+      cursorY,
+      leftPaddingPt,
+      usableWidthPt,
+    });
+  }
+
+  const targetWidthPt = Math.max(usableWidthPt, 1);
+  const targetHeightPt = pxToPt(barcodeHeightPx);
+  const widthScale = targetWidthPt / image.width;
+  const heightScale = targetHeightPt / image.height;
+  const scale = Math.min(widthScale, heightScale);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  const drawX = leftPaddingPt + Math.max((usableWidthPt - drawWidth) / 2, 0);
+  const drawY = cursorY - drawHeight;
+
+  page.drawImage(image, {
+    x: drawX,
+    y: drawY,
+    width: drawWidth,
+    height: drawHeight,
+  });
+
+  return drawY;
+}
+
+async function generateLabelsPdfBlob(labels) {
+  if (!Array.isArray(labels) || labels.length === 0) {
+    return null;
+  }
+
+  const pdfLib = await loadPdfLib();
+  if (!pdfLib) {
+    throw new Error('PDF 라이브러리를 불러오지 못했습니다.');
+  }
+
+  const { PDFDocument, StandardFonts, rgb } = pdfLib;
+  const pdfDoc = await PDFDocument.create();
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const colors = {
+    dark: rgb(17 / 255, 24 / 255, 39 / 255),
+    black: rgb(0, 0, 0),
+  };
+
+  for (const label of labels) {
+    if (!label) {
+      continue;
+    }
+
+    const widthMm = Number(label.labelWidth);
+    const heightMm = Number(label.labelHeight);
+
+    if (!Number.isFinite(widthMm) || !Number.isFinite(heightMm) || widthMm <= 0 || heightMm <= 0) {
+      continue;
+    }
+
+    const pageWidthPt = mmToPt(widthMm);
+    const pageHeightPt = mmToPt(heightMm);
+    const page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
+
+    const verticalPaddingPt = mmToPt(LABEL_VERTICAL_PADDING_MM / 2);
+    const horizontalPaddingPt = mmToPt(LABEL_HORIZONTAL_PADDING_MM / 2);
+    const gapPt = mmToPt(LABEL_GAP_MM);
+    const usableWidthPt = Math.max(pageWidthPt - horizontalPaddingPt * 2, 1);
+
+    let cursorY = pageHeightPt - verticalPaddingPt;
+
+    const blocks = [];
+
+    if (label.includeName) {
+      const productLines = splitIntoLines(label.productName);
+      blocks.push({
+        type: 'text',
+        lines: productLines,
+        font: fontBold,
+        fontSizePx: Number(label.productFontSize) || 16,
+        color: colors.dark,
+      });
+
+      if (label.subProductName) {
+        const subLines = splitIntoLines(label.subProductName);
+        blocks.push({
+          type: 'text',
+          lines: subLines,
+          font: fontRegular,
+          fontSizePx: Number(label.subProductFontSize) || 14,
+          color: colors.black,
+        });
+      }
+    }
+
+    blocks.push({ type: 'barcode' });
+
+    if (label.showText && label.barcodeValue) {
+      blocks.push({
+        type: 'text',
+        lines: [label.barcodeValue],
+        font: fontBold,
+        fontSizePx: Number(label.barcodeFontSize) || 12,
+        color: colors.dark,
+      });
+    }
+
+    for (let index = 0; index < blocks.length; index += 1) {
+      const block = blocks[index];
+
+      if (!block) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+
+      if (block.type === 'text') {
+        cursorY = drawCenteredTextBlock({
+          page,
+          lines: block.lines,
+          font: block.font,
+          fontSizePx: block.fontSizePx,
+          color: block.color,
+          cursorY,
+          leftPaddingPt: horizontalPaddingPt,
+          usableWidthPt,
+        });
+      } else if (block.type === 'barcode') {
+        cursorY = await drawBarcodeBlock({
+          page,
+          pdfDoc,
+          label,
+          cursorY,
+          leftPaddingPt: horizontalPaddingPt,
+          usableWidthPt,
+          fallbackFont: fontBold,
+          color: colors.dark,
+        });
+      }
+
+      if (index < blocks.length - 1) {
+        cursorY -= gapPt;
+      }
+    }
+  }
+
+  if (pdfDoc.getPageCount() === 0) {
+    return null;
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  return new Blob([pdfBytes], { type: 'application/pdf' });
+}
+
+function createDownloadFilename() {
+  const now = new Date();
+  const iso = now.toISOString().replace(/[:.]/g, '-');
+  return `barcode-labels-${iso}.pdf`;
+}
+
 function openSystemPrintDialog({ emptyMessage }) {
   const printableLabels = getPrintableLabels();
 
@@ -1589,10 +1992,52 @@ function handlePrint() {
   });
 }
 
-function handleDownloadPdf() {
-  openSystemPrintDialog({
-    emptyMessage: '다운로드할 라벨이 없습니다. 먼저 라벨을 추가해주세요.',
-  });
+async function handleDownloadPdf(event) {
+  if (event && typeof event.preventDefault === 'function') {
+    event.preventDefault();
+  }
+
+  const printableLabels = getPrintableLabels();
+
+  if (printableLabels.length === 0) {
+    alert('다운로드할 라벨이 없습니다. 먼저 라벨을 추가해주세요.');
+    return;
+  }
+
+  if (downloadButton) {
+    downloadButton.disabled = true;
+    downloadButton.setAttribute('aria-busy', 'true');
+  }
+
+  try {
+    const pdfBlob = await generateLabelsPdfBlob(printableLabels);
+
+    if (!pdfBlob) {
+      alert('PDF를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
+    const downloadUrl = URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = createDownloadFilename();
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+      URL.revokeObjectURL(downloadUrl);
+    }, 0);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('PDF 생성 중 오류가 발생했습니다.', error);
+    alert('PDF 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+  } finally {
+    if (downloadButton) {
+      downloadButton.disabled = false;
+      downloadButton.removeAttribute('aria-busy');
+    }
+  }
 }
 
 function updateDraft() {
