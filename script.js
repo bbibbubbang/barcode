@@ -2,6 +2,8 @@ const form = document.getElementById('label-form');
 const labelList = document.getElementById('label-list');
 const previewContainer = document.getElementById('label-preview');
 const previewPagination = document.getElementById('preview-pagination');
+const addButton = document.getElementById('add-button');
+const completeEditButton = document.getElementById('complete-edit-button');
 const resetButton = document.getElementById('reset-button');
 const printButton = document.getElementById('print-button');
 const downloadButton = document.getElementById('download-button');
@@ -37,6 +39,23 @@ const state = {
 let isResettingForm = false;
 let printPageStyleElement = null;
 let hasWarnedPrintSizeMismatch = false;
+
+function updateFormEditingState() {
+  const isEditing = Boolean(state.editingLabelId);
+
+  if (form) {
+    form.dataset.editing = isEditing ? 'true' : 'false';
+  }
+
+  if (addButton) {
+    addButton.hidden = isEditing;
+  }
+
+  if (completeEditButton) {
+    completeEditButton.hidden = !isEditing;
+    completeEditButton.disabled = !isEditing;
+  }
+}
 
 const MM_TO_PX = 96 / 25.4;
 function mmToPx(mm) {
@@ -581,6 +600,7 @@ function startEditingLabel(id) {
     includeName: sanitized.includeName,
   });
 
+  updateFormEditingState();
   renderPreview();
 }
 
@@ -646,6 +666,7 @@ function handleFormSubmit(event) {
     isResettingForm = true;
     form.reset();
     isResettingForm = false;
+    updateFormEditingState();
     return;
   }
 
@@ -683,6 +704,7 @@ function removeLabel(id) {
     isResettingForm = true;
     form.reset();
     isResettingForm = false;
+    updateFormEditingState();
   }
 
   renderPreview();
@@ -697,6 +719,7 @@ function resetLabels() {
 
     if (state.editingLabelId) {
       state.editingLabelId = null;
+      updateFormEditingState();
       updateDraft();
       return;
     }
@@ -1608,11 +1631,27 @@ function init() {
   form.addEventListener('reset', () => {
     state.draft = null;
     state.editingLabelId = null;
+    updateFormEditingState();
     renderPreview();
     requestAnimationFrame(() => {
       persistFormState(null);
     });
   });
+  if (completeEditButton) {
+    completeEditButton.addEventListener('click', () => {
+      if (!state.editingLabelId) {
+        return;
+      }
+
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+        return;
+      }
+
+      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+      form.dispatchEvent(submitEvent);
+    });
+  }
   printButton.addEventListener('click', handlePrint);
   if (downloadButton) {
     downloadButton.addEventListener('click', handleDownloadPdf);
@@ -1621,6 +1660,8 @@ function init() {
   if (restoredFormValues && hasDraftContent(restoredFormValues)) {
     updateDraft();
   }
+
+  updateFormEditingState();
 
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', schedulePreviewBarcodeAdjustment);

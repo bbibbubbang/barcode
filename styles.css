@@ -400,12 +400,6 @@ textarea:focus {
   margin: 0 auto;
 }
 
-.preview__hint {
-  margin: 0 0 24px;
-  color: var(--color-muted);
-  line-height: 1.5;
-}
-
 .label-preview {
   --sheet-width: 0px;
   --sheet-height: 0px;
