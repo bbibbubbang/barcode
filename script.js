@@ -1221,8 +1221,7 @@ function createPreviewLabel(label) {
       barcodeWrapper.innerHTML = `<p class="label-preview__empty">바코드 스크립트를 불러오지 못했습니다.<br />인터넷 연결을 확인하거나 새로고침 후 다시 시도해주세요.</p>`;
     }
   } else {
-    barcodeWrapper.innerHTML =
-      '<p class="label-preview__empty">바코드 값을 입력하면 미리보기를 확인할 수 있습니다.</p>';
+    barcodeWrapper.innerHTML = '';
   }
 
   if (label.showText && hasBarcodeValue) {
