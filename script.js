@@ -27,6 +27,17 @@ const LINE_HEIGHT_RATIO = 1.2;
 const BARCODE_CANVAS_SCALE = 2;
 
 const PDF_LIB_SOURCE_URL = 'vendor/pdf-lib.min.js';
+const PDF_FONTKIT_SOURCE_URL = 'vendor/fontkit.umd.min.js';
+const PDF_FONT_SOURCE_URLS = {
+  regular: {
+    url: 'vendor/NotoSansCJKkr-Regular.otf',
+    fileName: 'NotoSansCJKkr-Regular.otf',
+  },
+  bold: {
+    url: 'vendor/NotoSansCJKkr-Bold.otf',
+    fileName: 'NotoSansCJKkr-Bold.otf',
+  },
+};
 
 const BARCODE_TEXT_STYLE_OVERRIDES = {
   fill: '#111827',
@@ -1572,6 +1583,9 @@ function getPrintableLabels() {
 }
 
 let pdfLibLoadingPromise = null;
+let fontkitLoadingPromise = null;
+let pdfFontLoadingPromise = null;
+let loadedFontkit = null;
 
 function getLoadedPdfLib() {
   if (typeof globalThis === 'undefined') {
@@ -1584,6 +1598,24 @@ function getLoadedPdfLib() {
   }
 
   return library;
+}
+
+function getLoadedFontkit() {
+  if (loadedFontkit) {
+    return loadedFontkit;
+  }
+
+  if (typeof globalThis === 'undefined') {
+    return null;
+  }
+
+  const { fontkit } = globalThis;
+  if (!fontkit) {
+    return null;
+  }
+
+  loadedFontkit = fontkit;
+  return loadedFontkit;
 }
 
 function loadPdfLib() {
@@ -1617,6 +1649,91 @@ function loadPdfLib() {
   }
 
   return pdfLibLoadingPromise;
+}
+
+function loadFontkit() {
+  const existing = getLoadedFontkit();
+  if (existing) {
+    return Promise.resolve(existing);
+  }
+
+  if (!fontkitLoadingPromise) {
+    fontkitLoadingPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = PDF_FONTKIT_SOURCE_URL;
+      script.async = true;
+      script.onload = () => {
+        const library = getLoadedFontkit();
+        if (library) {
+          loadedFontkit = library;
+          resolve(library);
+          return;
+        }
+
+        reject(new Error('fontkit 라이브러리를 초기화하지 못했습니다.'));
+      };
+      script.onerror = () => {
+        reject(new Error('fontkit 라이브러리를 불러오는 중 오류가 발생했습니다.'));
+      };
+      document.head.appendChild(script);
+    }).catch((error) => {
+      fontkitLoadingPromise = null;
+      throw error;
+    });
+  }
+
+  return fontkitLoadingPromise.then((library) => {
+    loadedFontkit = library;
+    return library;
+  });
+}
+
+async function ensureFontkitRegistered(pdfDoc) {
+  if (!pdfDoc || typeof pdfDoc.registerFontkit !== 'function') {
+    return;
+  }
+
+  const fontkit = await loadFontkit();
+  if (!fontkit) {
+    throw new Error('fontkit 라이브러리를 불러오지 못했습니다.');
+  }
+
+  pdfDoc.registerFontkit(fontkit);
+}
+
+function loadPdfFonts() {
+  if (!pdfFontLoadingPromise) {
+    const entries = Object.entries(PDF_FONT_SOURCE_URLS);
+
+    pdfFontLoadingPromise = Promise.all(
+      entries.map(async ([key, source]) => {
+        const { url, fileName } =
+          typeof source === 'string'
+            ? { url: source, fileName: source.split('/').pop() || source }
+            : source;
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          const missingHint =
+            response.status === 404 && fileName
+              ? ` (프로젝트의 vendor 폴더에 ${fileName} 파일이 존재하는지 확인해주세요.)`
+              : '';
+          throw new Error(`폰트(${key}) 파일을 불러오지 못했습니다.${missingHint}`);
+        }
+
+        const buffer = await response.arrayBuffer();
+        return [key, new Uint8Array(buffer)];
+      }),
+    )
+      .then((pairs) => Object.fromEntries(pairs))
+      .catch((error) => {
+        pdfFontLoadingPromise = null;
+        throw error;
+      });
+  }
+
+  return pdfFontLoadingPromise;
 }
 
 function dataUrlToUint8Array(dataUrl) {
@@ -1839,8 +1956,29 @@ async function generateLabelsPdfBlob(labels) {
 
   const { PDFDocument, StandardFonts, rgb } = pdfLib;
   const pdfDoc = await PDFDocument.create();
-  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  await ensureFontkitRegistered(pdfDoc);
+  let fontRegularBytes = null;
+  let fontBoldBytes = null;
+
+  try {
+    const loadedFonts = await loadPdfFonts();
+    if (loadedFonts) {
+      fontRegularBytes = loadedFonts.regular || null;
+      fontBoldBytes = loadedFonts.bold || loadedFonts.regular || null;
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('PDF 폰트를 불러오는 중 오류가 발생했습니다.', error);
+    throw error;
+  }
+
+  const fontEmbedOptions = { subset: true };
+  const fontRegular = fontRegularBytes
+    ? await pdfDoc.embedFont(fontRegularBytes, fontEmbedOptions)
+    : await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = fontBoldBytes
+    ? await pdfDoc.embedFont(fontBoldBytes, fontEmbedOptions)
+    : fontRegular;
 
   const colors = {
     dark: rgb(17 / 255, 24 / 255, 39 / 255),
@@ -2030,7 +2168,17 @@ async function handleDownloadPdf(event) {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('PDF 생성 중 오류가 발생했습니다.', error);
-    alert('PDF 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    const message =
+      error && typeof error.message === 'string'
+        ? error.message
+        : '';
+    if (message.includes('폰트') && message.includes('vendor')) {
+      alert(
+        `${message}\n\n필요한 폰트 파일이 프로젝트의 vendor 폴더에 있는지 확인한 뒤 다시 시도해주세요.`,
+      );
+    } else {
+      alert('PDF 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    }
   } finally {
     if (downloadButton) {
       downloadButton.disabled = false;
