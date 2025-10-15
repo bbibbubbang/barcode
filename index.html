@@ -144,7 +144,17 @@
             </label>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn--primary">라벨 추가</button>
+            <button type="submit" id="add-button" class="btn btn--primary">
+              라벨 추가
+            </button>
+            <button
+              type="button"
+              id="complete-edit-button"
+              class="btn btn--primary"
+              hidden
+            >
+              수정 완료
+            </button>
             <button type="button" id="reset-button" class="btn">전체 삭제</button>
           </div>
         </form>
@@ -165,10 +175,6 @@
           class="preview__pagination"
           aria-live="polite"
         ></div>
-        <p class="preview__hint">
-          라벨은 인쇄 시에도 동일한 형태로 출력됩니다. 페이지 여백을 0으로
-          설정하면 라벨지가 더 정확하게 맞춰집니다.
-        </p>
         <div id="label-preview" class="label-preview"></div>
       </section>
     </main>
