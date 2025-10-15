@@ -1265,19 +1265,6 @@ function adjustBarcodeHeightsForElements(elements, labels) {
   }
 }
 
-function waitForNextFrame() {
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-      resolve();
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      resolve();
-    });
-  });
-}
-
 function createPreviewLabel(label) {
   const element = document.createElement('div');
   element.className = 'preview-label';
@@ -1569,12 +1556,14 @@ function getPrintableLabels() {
   return labels.filter((label) => label && hasDraftContent(label));
 }
 
-function handlePrint() {
+function openSystemPrintDialog({ emptyMessage }) {
   const printableLabels = getPrintableLabels();
 
   if (printableLabels.length === 0) {
-    alert('인쇄할 라벨이 없습니다. 먼저 라벨을 추가해주세요.');
-    return;
+    if (emptyMessage) {
+      alert(emptyMessage);
+    }
+    return false;
   }
 
   applyPrintPageSizeFromLabels(printableLabels);
@@ -1590,113 +1579,20 @@ function handlePrint() {
       window.print();
     });
   });
+
+  return true;
 }
 
-function getExportScale() {
-  const deviceScale = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  const preferredScale = Math.ceil(deviceScale * 2);
-  return Math.max(3, preferredScale);
+function handlePrint() {
+  openSystemPrintDialog({
+    emptyMessage: '인쇄할 라벨이 없습니다. 먼저 라벨을 추가해주세요.',
+  });
 }
 
-async function handleDownloadPdf() {
-  const printableLabels = getPrintableLabels();
-
-  if (printableLabels.length === 0) {
-    alert('다운로드할 라벨이 없습니다. 먼저 라벨을 추가해주세요.');
-    return;
-  }
-
-  const jsPdfNamespace = globalThis.jspdf || null;
-  const { jsPDF } = jsPdfNamespace || {};
-
-  if (typeof jsPDF !== 'function') {
-    alert('PDF 생성 도구를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
-    return;
-  }
-
-  const html2canvas = globalThis.html2canvas || null;
-  if (typeof html2canvas !== 'function') {
-    alert('PDF 생성 도구를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
-    return;
-  }
-
-  const exportContainer = document.createElement('div');
-  exportContainer.style.position = 'fixed';
-  exportContainer.style.left = '-10000px';
-  exportContainer.style.top = '0';
-  exportContainer.style.pointerEvents = 'none';
-  exportContainer.style.opacity = '0';
-  exportContainer.style.zIndex = '-1';
-  exportContainer.setAttribute('aria-hidden', 'true');
-
-  document.body.appendChild(exportContainer);
-
-  try {
-    let doc = null;
-
-    for (let index = 0; index < printableLabels.length; index += 1) {
-      const label = printableLabels[index];
-      const pageLabels = [label];
-      const { sheet, labelElements } = buildPrintSheet(pageLabels);
-      exportContainer.appendChild(sheet);
-
-      await waitForNextFrame();
-      adjustBarcodeHeightsForElements(labelElements, pageLabels);
-      await waitForNextFrame();
-
-      const exportScale = getExportScale();
-      const canvas = await html2canvas(sheet, {
-        backgroundColor: '#ffffff',
-        scale: exportScale,
-        useCORS: true,
-      });
-
-      exportContainer.removeChild(sheet);
-
-      const pageSize = getPrintPageSizeFromLabels(pageLabels, { warn: false });
-      const widthMmFromPage = pageSize && Number.isFinite(pageSize.width) ? pageSize.width : null;
-      const heightMmFromPage =
-        pageSize && Number.isFinite(pageSize.height) ? pageSize.height : null;
-
-      const fallbackWidthMm = canvas.width / (MM_TO_PX * exportScale);
-      const fallbackHeightMm = canvas.height / (MM_TO_PX * exportScale);
-
-      const hasValidFallback =
-        Number.isFinite(fallbackWidthMm) &&
-        fallbackWidthMm > 0 &&
-        Number.isFinite(fallbackHeightMm) &&
-        fallbackHeightMm > 0;
-
-      const pdfWidth = widthMmFromPage || (hasValidFallback ? fallbackWidthMm : 210);
-      const pdfHeight = heightMmFromPage || (hasValidFallback ? fallbackHeightMm : 297);
-      const orientation = pdfWidth >= pdfHeight ? 'landscape' : 'portrait';
-      const imageData = canvas.toDataURL('image/png');
-
-      if (!doc) {
-        doc = new jsPDF({
-          orientation,
-          unit: 'mm',
-          format: [pdfWidth, pdfHeight],
-        });
-      } else {
-        doc.addPage([pdfWidth, pdfHeight], orientation);
-      }
-
-      doc.addImage(imageData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    }
-
-    if (doc) {
-      doc.save('barcode-labels.pdf');
-    }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('PDF 생성 중 오류가 발생했습니다.', error);
-    alert('PDF 생성 중 오류가 발생했습니다. 다시 시도해주세요.');
-  } finally {
-    if (exportContainer.parentNode) {
-      exportContainer.parentNode.removeChild(exportContainer);
-    }
-  }
+function handleDownloadPdf() {
+  openSystemPrintDialog({
+    emptyMessage: '다운로드할 라벨이 없습니다. 먼저 라벨을 추가해주세요.',
+  });
 }
 
 function updateDraft() {
