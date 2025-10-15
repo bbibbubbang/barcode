@@ -1623,38 +1623,54 @@ async function handleDownloadPdf() {
   exportContainer.style.zIndex = '-1';
   exportContainer.setAttribute('aria-hidden', 'true');
 
-  const { sheet, labelElements } = buildPrintSheet(printableLabels);
-  exportContainer.appendChild(sheet);
   document.body.appendChild(exportContainer);
 
   try {
-    await waitForNextFrame();
-    adjustBarcodeHeightsForElements(labelElements, printableLabels);
-    await waitForNextFrame();
+    let doc = null;
 
-    const canvas = await html2canvas(sheet, {
-      backgroundColor: '#ffffff',
-      scale: 2,
-      useCORS: true,
-    });
+    for (let index = 0; index < printableLabels.length; index += 1) {
+      const label = printableLabels[index];
+      const pageLabels = [label];
+      const { sheet, labelElements } = buildPrintSheet(pageLabels);
+      exportContainer.appendChild(sheet);
 
-    const widthMm = canvas.width / MM_TO_PX;
-    const heightMm = canvas.height / MM_TO_PX;
-    const hasValidSize =
-      Number.isFinite(widthMm) && widthMm > 0 && Number.isFinite(heightMm) && heightMm > 0;
-    const pdfWidth = hasValidSize ? widthMm : 210;
-    const pdfHeight = hasValidSize ? heightMm : 297;
-    const orientation = pdfWidth >= pdfHeight ? 'landscape' : 'portrait';
+      await waitForNextFrame();
+      adjustBarcodeHeightsForElements(labelElements, pageLabels);
+      await waitForNextFrame();
 
-    const doc = new jsPDF({
-      orientation,
-      unit: 'mm',
-      format: [pdfWidth, pdfHeight],
-    });
+      const canvas = await html2canvas(sheet, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+      });
 
-    const imageData = canvas.toDataURL('image/png');
-    doc.addImage(imageData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    doc.save('barcode-labels.pdf');
+      exportContainer.removeChild(sheet);
+
+      const widthMm = canvas.width / MM_TO_PX;
+      const heightMm = canvas.height / MM_TO_PX;
+      const hasValidSize =
+        Number.isFinite(widthMm) && widthMm > 0 && Number.isFinite(heightMm) && heightMm > 0;
+      const pdfWidth = hasValidSize ? widthMm : 210;
+      const pdfHeight = hasValidSize ? heightMm : 297;
+      const orientation = pdfWidth >= pdfHeight ? 'landscape' : 'portrait';
+      const imageData = canvas.toDataURL('image/png');
+
+      if (!doc) {
+        doc = new jsPDF({
+          orientation,
+          unit: 'mm',
+          format: [pdfWidth, pdfHeight],
+        });
+      } else {
+        doc.addPage([pdfWidth, pdfHeight], orientation);
+      }
+
+      doc.addImage(imageData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    }
+
+    if (doc) {
+      doc.save('barcode-labels.pdf');
+    }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('PDF 생성 중 오류가 발생했습니다.', error);
