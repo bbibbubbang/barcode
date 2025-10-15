@@ -1592,6 +1592,12 @@ function handlePrint() {
   });
 }
 
+function getExportScale() {
+  const deviceScale = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const preferredScale = Math.ceil(deviceScale * 2);
+  return Math.max(3, preferredScale);
+}
+
 async function handleDownloadPdf() {
   const printableLabels = getPrintableLabels();
 
@@ -1638,20 +1644,31 @@ async function handleDownloadPdf() {
       adjustBarcodeHeightsForElements(labelElements, pageLabels);
       await waitForNextFrame();
 
+      const exportScale = getExportScale();
       const canvas = await html2canvas(sheet, {
         backgroundColor: '#ffffff',
-        scale: 2,
+        scale: exportScale,
         useCORS: true,
       });
 
       exportContainer.removeChild(sheet);
 
-      const widthMm = canvas.width / MM_TO_PX;
-      const heightMm = canvas.height / MM_TO_PX;
-      const hasValidSize =
-        Number.isFinite(widthMm) && widthMm > 0 && Number.isFinite(heightMm) && heightMm > 0;
-      const pdfWidth = hasValidSize ? widthMm : 210;
-      const pdfHeight = hasValidSize ? heightMm : 297;
+      const pageSize = getPrintPageSizeFromLabels(pageLabels, { warn: false });
+      const widthMmFromPage = pageSize && Number.isFinite(pageSize.width) ? pageSize.width : null;
+      const heightMmFromPage =
+        pageSize && Number.isFinite(pageSize.height) ? pageSize.height : null;
+
+      const fallbackWidthMm = canvas.width / (MM_TO_PX * exportScale);
+      const fallbackHeightMm = canvas.height / (MM_TO_PX * exportScale);
+
+      const hasValidFallback =
+        Number.isFinite(fallbackWidthMm) &&
+        fallbackWidthMm > 0 &&
+        Number.isFinite(fallbackHeightMm) &&
+        fallbackHeightMm > 0;
+
+      const pdfWidth = widthMmFromPage || (hasValidFallback ? fallbackWidthMm : 210);
+      const pdfHeight = heightMmFromPage || (hasValidFallback ? fallbackHeightMm : 297);
       const orientation = pdfWidth >= pdfHeight ? 'landscape' : 'portrait';
       const imageData = canvas.toDataURL('image/png');
 
