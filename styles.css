@@ -484,10 +484,17 @@ textarea:focus {
   gap: var(--label-gap-override, 1.3mm);
   padding-block: 2mm;
   padding-inline: 3mm;
-  border: 1px solid #000;
   background: #fff;
   box-sizing: border-box;
   text-align: center;
+}
+
+.preview-label {
+  border: 1px solid #000;
+}
+
+.print-label {
+  border: none;
 }
 
 .preview-label__name,
