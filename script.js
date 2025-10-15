@@ -14,6 +14,7 @@ const PRINT_PAGE_STYLE_ID = 'barcode-maker-print-page-size';
 const STORAGE_KEYS = {
   labels: 'barcode-maker:labels',
   form: 'barcode-maker:form',
+  preferences: 'barcode-maker:preferences',
 };
 
 const LABEL_VERTICAL_PADDING_MM = 4; // 총 상하 패딩 (styles.css와 동일해야 함)
@@ -367,6 +368,94 @@ function persistFormState(values) {
   }
 }
 
+function getPreferenceDefaults() {
+  const defaults = getDefaults();
+
+  return {
+    ...defaults,
+    showText: Boolean(form.elements.showText?.defaultChecked),
+    includeName: Boolean(form.elements.includeName?.defaultChecked),
+  };
+}
+
+function extractPreferences(values) {
+  if (!values || typeof values !== 'object') {
+    return null;
+  }
+
+  const defaults = getPreferenceDefaults();
+
+  return {
+    productFontSize: normalizeNumber(Number(values.productFontSize), {
+      min: 8,
+      max: 36,
+      fallback: defaults.productFontSize,
+    }),
+    subProductFontSize: normalizeNumber(Number(values.subProductFontSize), {
+      min: 8,
+      max: 32,
+      fallback: defaults.subProductFontSize,
+    }),
+    barcodeFontSize: normalizeNumber(Number(values.barcodeFontSize), {
+      min: 8,
+      max: 28,
+      fallback: defaults.barcodeFontSize,
+    }),
+    labelWidth: normalizeNumber(Number(values.labelWidth), {
+      min: 30,
+      max: 100,
+      fallback: defaults.labelWidth,
+    }),
+    labelHeight: normalizeNumber(Number(values.labelHeight), {
+      min: 20,
+      max: 60,
+      fallback: defaults.labelHeight,
+    }),
+    showText:
+      typeof values.showText === 'boolean' ? values.showText : defaults.showText,
+    includeName:
+      typeof values.includeName === 'boolean'
+        ? values.includeName
+        : defaults.includeName,
+  };
+}
+
+function persistPreferences(values) {
+  const preferences = extractPreferences(values);
+  if (!preferences) return;
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.preferences, JSON.stringify(preferences));
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('환경 설정을 저장하는 중 오류가 발생했습니다.', error);
+  }
+}
+
+function getStoredPreferences() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.preferences);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return extractPreferences(parsed);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('환경 설정을 불러오는 중 오류가 발생했습니다.', error);
+    return null;
+  }
+}
+
+function applyPreferencesFromStorage() {
+  const preferences = getStoredPreferences();
+  if (!preferences) return null;
+
+  isResettingForm = true;
+  applyFormValues(preferences);
+  isResettingForm = false;
+
+  return preferences;
+}
+
 function applyFormValues(values) {
   if (!values || typeof values !== 'object') return;
 
@@ -463,6 +552,8 @@ function restoreFormState() {
 
     isResettingForm = true;
     applyFormValues(parsed);
+
+    persistPreferences(parsed);
 
     return parsed;
   } catch (error) {
@@ -575,6 +666,8 @@ function startEditingLabel(id) {
   applyFormValues(sanitized);
   isResettingForm = false;
 
+  persistPreferences(sanitized);
+
   state.draft = {
     ...sanitized,
     id,
@@ -636,6 +729,8 @@ function handleFormSubmit(event) {
   event.preventDefault();
   const rawValues = getFormValues();
   const formValues = withFallbacks(rawValues);
+
+  persistPreferences(formValues);
 
   if (!formValues.productName || !formValues.barcodeValue) {
     alert('상품명과 바코드 값은 필수 입력 항목입니다.');
@@ -1577,6 +1672,8 @@ function updateDraft() {
 
   const hasContent = hasDraftContent(formValues);
 
+  persistPreferences(formValues);
+
   persistFormState(hasContent ? formValues : null);
 
   if (!hasContent) {
@@ -1618,6 +1715,7 @@ function handleFormChange() {
 }
 
 function init() {
+  applyPreferencesFromStorage();
   restoreLabels();
   renderPreview();
 
@@ -1634,6 +1732,7 @@ function init() {
     renderPreview();
     requestAnimationFrame(() => {
       persistFormState(null);
+      applyPreferencesFromStorage();
     });
   });
   if (completeEditButton) {
