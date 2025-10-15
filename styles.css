@@ -510,7 +510,7 @@ textarea:focus {
 .preview-label__subname,
 .print-label__subname {
   font-size: 0.85rem;
-  color: #444b55;
+  color: #000000;
   margin: 0;
   text-align: center;
   white-space: pre-line;
