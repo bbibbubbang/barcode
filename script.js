@@ -26,8 +26,7 @@ const MIN_BARCODE_HEIGHT_PX = 8;
 const LINE_HEIGHT_RATIO = 1.2;
 const BARCODE_CANVAS_SCALE = 2;
 
-const PDF_LIB_SOURCE_URL =
-  'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+const PDF_LIB_SOURCE_URL = 'vendor/pdf-lib.min.js';
 
 const BARCODE_TEXT_STYLE_OVERRIDES = {
   fill: '#111827',
