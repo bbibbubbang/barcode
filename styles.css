@@ -534,7 +534,7 @@ textarea:focus {
   text-align: center;
   font-weight: 600;
   color: #111827;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   line-height: var(--line-gap-override, 1.2);
 }
 
@@ -543,7 +543,7 @@ textarea:focus {
   fill: #111827 !important;
   font-family: 'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   font-weight: 600;
-  letter-spacing: 0.02em !important;
+  letter-spacing: 0 !important;
 }
 
 .print-sheet__group {
