@@ -45,7 +45,7 @@ const BARCODE_TEXT_STYLE_OVERRIDES = {
   fill: '#111827',
   fontFamily: "'Noto Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
   fontWeight: '600',
-  letterSpacing: '0.08em',
+  letterSpacing: '0',
 };
 
 const state = {
