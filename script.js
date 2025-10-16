@@ -1808,11 +1808,12 @@ function drawCenteredTextBlock({
       sizePt,
     });
     const centeredX = leftPaddingPt + Math.max((usableWidthPt - textWidth) / 2, 0);
-
-    page.drawText(text, {
+    drawPdfText({
+      page,
+      text,
       x: centeredX,
       y: nextCursorY,
-      size: sizePt,
+      sizePt,
       font,
       color,
       wordSpacing,
@@ -1882,6 +1883,70 @@ function getPdfTextLayout({ font, text, sizePt }) {
     width: baseWidth + wordSpacing * spacesCount,
     wordSpacing,
   };
+}
+
+function drawPdfText({ page, text, x, y, sizePt, font, color, wordSpacing }) {
+  if (!page || !font || typeof page.drawText !== 'function') {
+    return;
+  }
+
+  const safeText = typeof text === 'string' ? text : `${text ?? ''}`;
+  if (safeText.length === 0 || !Number.isFinite(sizePt) || sizePt <= 0) {
+    return;
+  }
+
+  if (!Number.isFinite(wordSpacing) || wordSpacing === 0) {
+    page.drawText(safeText, {
+      x,
+      y,
+      size: sizePt,
+      font,
+      color,
+    });
+    return;
+  }
+
+  const baseSpaceWidth = font.widthOfTextAtSize(' ', sizePt);
+  const targetSpaceWidth = baseSpaceWidth + wordSpacing;
+
+  if (!Number.isFinite(targetSpaceWidth) || targetSpaceWidth <= 0) {
+    page.drawText(safeText, {
+      x,
+      y,
+      size: sizePt,
+      font,
+      color,
+    });
+    return;
+  }
+
+  let cursorX = x;
+  let buffer = '';
+
+  const flushBuffer = () => {
+    if (!buffer) return;
+    page.drawText(buffer, {
+      x: cursorX,
+      y,
+      size: sizePt,
+      font,
+      color,
+    });
+    cursorX += font.widthOfTextAtSize(buffer, sizePt);
+    buffer = '';
+  };
+
+  for (let index = 0; index < safeText.length; index += 1) {
+    const char = safeText[index];
+    if (char === ' ') {
+      flushBuffer();
+      cursorX += targetSpaceWidth;
+    } else {
+      buffer += char;
+    }
+  }
+
+  flushBuffer();
 }
 
 function countStandardSpaces(text) {
