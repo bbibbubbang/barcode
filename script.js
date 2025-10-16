@@ -24,6 +24,8 @@ const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
 const LABEL_LINE_GAP_OVERRIDE_PROPERTY = '--line-gap-override';
 const MIN_BARCODE_HEIGHT_PX = 8;
 const LINE_HEIGHT_RATIO = 1.2;
+const PDF_SPACE_WIDTH_ADJUST_THRESHOLD = 0.5;
+const PDF_SPACE_WIDTH_TARGET_RATIO = 0.33;
 const BARCODE_CANVAS_SCALE = 2;
 
 const PDF_LIB_SOURCE_URL = 'vendor/pdf-lib.min.js';
@@ -1800,7 +1802,11 @@ function drawCenteredTextBlock({
     const text = typeof line === 'string' ? line : `${line ?? ''}`;
     nextCursorY -= sizePt;
 
-    const textWidth = font.widthOfTextAtSize(text, sizePt);
+    const { width: textWidth, wordSpacing } = getPdfTextLayout({
+      font,
+      text,
+      sizePt,
+    });
     const centeredX = leftPaddingPt + Math.max((usableWidthPt - textWidth) / 2, 0);
 
     page.drawText(text, {
@@ -1809,6 +1815,7 @@ function drawCenteredTextBlock({
       size: sizePt,
       font,
       color,
+      wordSpacing,
     });
 
     if (index < safeLines.length - 1) {
@@ -1817,6 +1824,72 @@ function drawCenteredTextBlock({
   });
 
   return nextCursorY;
+}
+
+function getPdfWordSpacing({ font, sizePt, text }) {
+  if (!font || !Number.isFinite(sizePt) || sizePt <= 0) {
+    return 0;
+  }
+
+  const spacesCount = countStandardSpaces(text);
+  if (spacesCount === 0) {
+    return 0;
+  }
+
+  const defaultSpaceWidth = font.widthOfTextAtSize(' ', sizePt);
+  if (!Number.isFinite(defaultSpaceWidth) || defaultSpaceWidth <= 0) {
+    return 0;
+  }
+
+  const defaultRatio = defaultSpaceWidth / sizePt;
+  if (defaultRatio <= PDF_SPACE_WIDTH_ADJUST_THRESHOLD) {
+    return 0;
+  }
+
+  const targetWidth = sizePt * PDF_SPACE_WIDTH_TARGET_RATIO;
+  const spacing = targetWidth - defaultSpaceWidth;
+  if (!Number.isFinite(spacing) || spacing >= 0) {
+    return 0;
+  }
+
+  return spacing;
+}
+
+function getPdfTextLayout({ font, text, sizePt }) {
+  if (!font || !Number.isFinite(sizePt) || sizePt <= 0) {
+    return { width: 0, wordSpacing: 0 };
+  }
+
+  const baseWidth = font.widthOfTextAtSize(text, sizePt);
+  const wordSpacing = getPdfWordSpacing({ font, sizePt, text });
+
+  if (!Number.isFinite(baseWidth) || baseWidth <= 0 || wordSpacing === 0) {
+    return {
+      width: baseWidth,
+      wordSpacing: 0,
+    };
+  }
+
+  const spacesCount = countStandardSpaces(text);
+  if (spacesCount === 0) {
+    return {
+      width: baseWidth,
+      wordSpacing: 0,
+    };
+  }
+
+  return {
+    width: baseWidth + wordSpacing * spacesCount,
+    wordSpacing,
+  };
+}
+
+function countStandardSpaces(text) {
+  if (typeof text !== 'string' || text.length === 0) {
+    return 0;
+  }
+
+  return (text.match(/ /g) || []).length;
 }
 
 function createBarcodeImageForPdf(label, widthPx, heightPx) {
