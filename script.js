@@ -26,7 +26,6 @@ const MIN_BARCODE_HEIGHT_PX = 8;
 const LINE_HEIGHT_RATIO = 1.2;
 const PDF_SPACE_WIDTH_ADJUST_THRESHOLD = 0.35;
 const PDF_SPACE_WIDTH_TARGET_RATIO = 0.18;
-const BARCODE_CANVAS_SCALE = 2;
 
 const PDF_LIB_SOURCE_URL = 'vendor/pdf-lib.min.js';
 const PDF_FONTKIT_SOURCE_URL = 'vendor/fontkit.umd.min.js';
@@ -1738,31 +1737,6 @@ function loadPdfFonts() {
   return pdfFontLoadingPromise;
 }
 
-function dataUrlToUint8Array(dataUrl) {
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
-    return null;
-  }
-
-  const commaIndex = dataUrl.indexOf(',');
-  if (commaIndex === -1) {
-    return null;
-  }
-
-  const base64 = dataUrl.slice(commaIndex + 1);
-  const binary = globalThis.atob ? globalThis.atob(base64) : null;
-  if (!binary) {
-    return null;
-  }
-
-  const length = binary.length;
-  const bytes = new Uint8Array(length);
-  for (let i = 0; i < length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return bytes;
-}
-
 function splitIntoLines(value) {
   if (typeof value !== 'string') {
     if (value == null) {
@@ -1957,56 +1931,94 @@ function countStandardSpaces(text) {
   return (text.match(/ /g) || []).length;
 }
 
-function createBarcodeImageForPdf(label, widthPx, heightPx) {
-  const JsBarcodeLibrary = getJsBarcode();
-  if (!JsBarcodeLibrary || !label || !label.barcodeValue) {
+function parseViewBox(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const parts = value
+    .trim()
+    .replace(/,/g, ' ')
+    .split(/\s+/)
+    .map((part) => Number.parseFloat(part));
+
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) {
+    return null;
+  }
+
+  return {
+    minX: parts[0],
+    minY: parts[1],
+    width: parts[2],
+    height: parts[3],
+  };
+}
+
+function createBarcodeVectorDataForPdf(label, widthPx, heightPx) {
+  if (!label || !label.barcodeValue) {
     return null;
   }
 
   const safeWidth = Math.max(Math.floor(widthPx), 1);
   const safeHeight = Math.max(Math.floor(heightPx), MIN_BARCODE_HEIGHT_PX);
-  const canvas = document.createElement('canvas');
-  const scaledWidth = Math.max(Math.floor(safeWidth * BARCODE_CANVAS_SCALE), 1);
-  const scaledHeight = Math.max(Math.floor(safeHeight * BARCODE_CANVAS_SCALE), 1);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', String(safeWidth));
+  svg.setAttribute('height', String(safeHeight));
 
-  canvas.width = scaledWidth;
-  canvas.height = scaledHeight;
+  const rendered = renderBarcode(svg, label.barcodeValue, {
+    ...getBarcodeRenderOptions(label, { heightPx: safeHeight }),
+    margin: 0,
+  });
 
-  const context = canvas.getContext('2d');
-  if (context && BARCODE_CANVAS_SCALE !== 1) {
-    context.scale(BARCODE_CANVAS_SCALE, BARCODE_CANVAS_SCALE);
-  }
-
-  try {
-    JsBarcodeLibrary(
-      canvas,
-      label.barcodeValue,
-      {
-        ...getBarcodeRenderOptions(label, { heightPx: safeHeight }),
-        margin: 0,
-      },
-    );
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('PDF용 바코드 생성 중 오류가 발생했습니다.', error);
+  if (!rendered) {
     return null;
   }
 
-  const bytes = dataUrlToUint8Array(canvas.toDataURL('image/png'));
-  if (!bytes) {
+  const viewBox = parseViewBox(svg.getAttribute('viewBox'));
+  const svgWidth = viewBox && Number.isFinite(viewBox.width)
+    ? viewBox.width
+    : safeWidth;
+  const svgHeight = viewBox && Number.isFinite(viewBox.height)
+    ? viewBox.height
+    : safeHeight;
+  const offsetX = viewBox && Number.isFinite(viewBox.minX) ? viewBox.minX : 0;
+  const offsetY = viewBox && Number.isFinite(viewBox.minY) ? viewBox.minY : 0;
+
+  if (!Number.isFinite(svgWidth) || !Number.isFinite(svgHeight) || svgWidth <= 0 || svgHeight <= 0) {
+    return null;
+  }
+
+  const rects = Array.from(svg.querySelectorAll('rect'))
+    .map((rect) => {
+      const x = parseNumericAttribute(rect.getAttribute('x'));
+      const y = parseNumericAttribute(rect.getAttribute('y'));
+      const rectWidth = parseNumericAttribute(rect.getAttribute('width'));
+      const rectHeight = parseNumericAttribute(rect.getAttribute('height'));
+
+      return {
+        x: Number.isFinite(x) ? x : 0,
+        y: Number.isFinite(y) ? y : 0,
+        width: Number.isFinite(rectWidth) ? rectWidth : 0,
+        height: Number.isFinite(rectHeight) ? rectHeight : 0,
+      };
+    })
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+
+  if (rects.length === 0) {
     return null;
   }
 
   return {
-    bytes,
-    width: canvas.width,
-    height: canvas.height,
+    width: svgWidth,
+    height: svgHeight,
+    offsetX,
+    offsetY,
+    rects,
   };
 }
 
 async function drawBarcodeBlock({
   page,
-  pdfDoc,
   label,
   cursorY,
   leftPaddingPt,
@@ -2031,25 +2043,13 @@ async function drawBarcodeBlock({
 
   const availableWidthMm = Math.max(Number(label.labelWidth) - LABEL_HORIZONTAL_PADDING_MM, 1);
   const availableWidthPx = Math.max(Math.round(mmToPx(availableWidthMm)), 1);
-  const barcodeHeightPx = Math.max(Math.round(computeBaseBarcodeHeightPx(label)), MIN_BARCODE_HEIGHT_PX);
-  const barcodeImage = createBarcodeImageForPdf(label, availableWidthPx, barcodeHeightPx);
+  const barcodeHeightPx = Math.max(
+    Math.round(computeBaseBarcodeHeightPx(label)),
+    MIN_BARCODE_HEIGHT_PX,
+  );
+  const vectorData = createBarcodeVectorDataForPdf(label, availableWidthPx, barcodeHeightPx);
 
-  if (!barcodeImage) {
-    return drawCenteredTextBlock({
-      page,
-      lines: ['바코드 생성 오류'],
-      font: fallbackFont,
-      fontSizePx: 12,
-      color,
-      cursorY,
-      leftPaddingPt,
-      usableWidthPt,
-    });
-  }
-
-  const image = await pdfDoc.embedPng(barcodeImage.bytes);
-
-  if (!image || image.width === 0 || image.height === 0) {
+  if (!vectorData) {
     return drawCenteredTextBlock({
       page,
       lines: ['바코드 생성 오류'],
@@ -2064,19 +2064,56 @@ async function drawBarcodeBlock({
 
   const targetWidthPt = Math.max(usableWidthPt, 1);
   const targetHeightPt = pxToPt(barcodeHeightPx);
-  const widthScale = targetWidthPt / image.width;
-  const heightScale = targetHeightPt / image.height;
+  const svgWidthPt = pxToPt(vectorData.width);
+  const svgHeightPt = pxToPt(vectorData.height);
+
+  if (svgWidthPt <= 0 || svgHeightPt <= 0) {
+    return drawCenteredTextBlock({
+      page,
+      lines: ['바코드 생성 오류'],
+      font: fallbackFont,
+      fontSizePx: 12,
+      color,
+      cursorY,
+      leftPaddingPt,
+      usableWidthPt,
+    });
+  }
+
+  const widthScale = targetWidthPt / svgWidthPt;
+  const heightScale = targetHeightPt / svgHeightPt;
   const scale = Math.min(widthScale, heightScale);
-  const drawWidth = image.width * scale;
-  const drawHeight = image.height * scale;
+  const drawWidth = svgWidthPt * scale;
+  const drawHeight = svgHeightPt * scale;
   const drawX = leftPaddingPt + Math.max((usableWidthPt - drawWidth) / 2, 0);
   const drawY = cursorY - drawHeight;
 
-  page.drawImage(image, {
-    x: drawX,
-    y: drawY,
-    width: drawWidth,
-    height: drawHeight,
+  const offsetX = Number.isFinite(vectorData.offsetX) ? vectorData.offsetX : 0;
+  const offsetY = Number.isFinite(vectorData.offsetY) ? vectorData.offsetY : 0;
+
+  vectorData.rects.forEach((rect) => {
+    if (!rect) {
+      return;
+    }
+
+    const rectWidthPt = pxToPt(rect.width) * scale;
+    const rectHeightPt = pxToPt(rect.height) * scale;
+
+    if (rectWidthPt <= 0 || rectHeightPt <= 0) {
+      return;
+    }
+
+    const rectXPt = drawX + pxToPt(rect.x - offsetX) * scale;
+    const rectTopPt = pxToPt(rect.y - offsetY + rect.height) * scale;
+    const rectYPt = drawY + drawHeight - rectTopPt;
+
+    page.drawRectangle({
+      x: rectXPt,
+      y: rectYPt,
+      width: rectWidthPt,
+      height: rectHeightPt,
+      color,
+    });
   });
 
   return drawY;
@@ -2207,7 +2244,6 @@ async function generateLabelsPdfBlob(labels) {
       } else if (block.type === 'barcode') {
         cursorY = await drawBarcodeBlock({
           page,
-          pdfDoc,
           label,
           cursorY,
           leftPaddingPt: horizontalPaddingPt,
