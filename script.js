@@ -2374,6 +2374,7 @@ async function generateLabelsPdfBlob(labels) {
   const colors = {
     dark: rgb(17 / 255, 24 / 255, 39 / 255),
     black: rgb(0, 0, 0),
+    white: rgb(1, 1, 1),
   };
 
   for (const label of labels) {
@@ -2391,6 +2392,14 @@ async function generateLabelsPdfBlob(labels) {
     const pageWidthPt = mmToPt(widthMm);
     const pageHeightPt = mmToPt(heightMm);
     const page = pdfDoc.addPage([pageWidthPt, pageHeightPt]);
+
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: pageWidthPt,
+      height: pageHeightPt,
+      color: colors.white,
+    });
 
     const verticalPaddingPt = mmToPt(LABEL_VERTICAL_PADDING_MM / 2);
     const horizontalPaddingPt = mmToPt(LABEL_HORIZONTAL_PADDING_MM / 2);
