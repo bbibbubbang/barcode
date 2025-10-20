@@ -24,8 +24,8 @@ const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
 const LABEL_LINE_GAP_OVERRIDE_PROPERTY = '--line-gap-override';
 const MIN_BARCODE_HEIGHT_PX = 8;
 const LINE_HEIGHT_RATIO = 1.2;
-const PDF_SPACE_WIDTH_ADJUST_THRESHOLD = 0.22;
-const PDF_SPACE_WIDTH_TARGET_RATIO = 0.12;
+const PDF_SPACE_WIDTH_ADJUST_MIN_RATIO_DIFF = 0.02;
+const PDF_SPACE_WIDTH_TARGET_RATIO = 0.25;
 
 const PDF_LIB_SOURCE_URL = 'vendor/pdf-lib.min.js';
 const PDF_FONTKIT_SOURCE_URL = 'vendor/fontkit.umd.min.js';
@@ -1816,14 +1816,15 @@ function getPdfWordSpacing({ font, sizePt, text }) {
     return 0;
   }
 
-  const defaultRatio = defaultSpaceWidth / sizePt;
-  if (defaultRatio <= PDF_SPACE_WIDTH_ADJUST_THRESHOLD) {
-    return 0;
-  }
-
   const targetWidth = sizePt * PDF_SPACE_WIDTH_TARGET_RATIO;
   const spacing = targetWidth - defaultSpaceWidth;
-  if (!Number.isFinite(spacing) || spacing >= 0) {
+  const ratioDifference = Math.abs(spacing) / sizePt;
+
+  if (
+    !Number.isFinite(spacing)
+    || !Number.isFinite(ratioDifference)
+    || ratioDifference < PDF_SPACE_WIDTH_ADJUST_MIN_RATIO_DIFF
+  ) {
     return 0;
   }
 
@@ -1954,6 +1955,217 @@ function parseViewBox(value) {
   };
 }
 
+function normalizeSvgColor(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim().toLowerCase();
+}
+
+function extractSvgStyleProperty(element, property) {
+  if (!element || typeof property !== 'string') {
+    return '';
+  }
+
+  const styleValue = element.getAttribute('style');
+  if (typeof styleValue !== 'string' || styleValue.length === 0) {
+    return '';
+  }
+
+  const propertyName = property.trim().toLowerCase();
+  if (!propertyName) {
+    return '';
+  }
+
+  const declarations = styleValue.split(';');
+  for (let index = declarations.length - 1; index >= 0; index -= 1) {
+    const declaration = declarations[index];
+    if (!declaration) {
+      continue;
+    }
+
+    const [rawName, rawValue] = declaration.split(':');
+    if (!rawName || typeof rawValue !== 'string') {
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
+    if (rawName.trim().toLowerCase() === propertyName) {
+      return rawValue.trim();
+    }
+  }
+
+  return '';
+}
+
+function isTransparentColor(value) {
+  const normalized = normalizeSvgColor(value);
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized === 'none' || normalized === 'transparent') {
+    return true;
+  }
+
+  const rgbaMatch = normalized.match(/^rgba?\(([^)]+)\)$/);
+  if (!rgbaMatch) {
+    return false;
+  }
+
+  const components = rgbaMatch[1]
+    .split(',')
+    .map((component) => component.trim())
+    .filter((component) => component.length > 0);
+
+  if (components.length === 4) {
+    const alpha = Number.parseFloat(components[3]);
+    if (Number.isFinite(alpha) && alpha <= 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isWhiteColor(value) {
+  const normalized = normalizeSvgColor(value);
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized === 'white') {
+    return true;
+  }
+
+  if (normalized.startsWith('#')) {
+    const hex = normalized.slice(1);
+
+    if (hex.length === 3) {
+      return hex.split('').every((char) => char === 'f');
+    }
+
+    if (hex.length === 6) {
+      return hex === 'ffffff';
+    }
+
+    if (hex.length === 8) {
+      return hex.startsWith('ffffff');
+    }
+
+    return false;
+  }
+
+  const rgbMatch = normalized.match(/^rgba?\(([^)]+)\)$/);
+  if (!rgbMatch) {
+    return false;
+  }
+
+  const components = rgbMatch[1]
+    .split(',')
+    .map((component) => component.trim())
+    .filter((component) => component.length > 0);
+
+  if (components.length < 3) {
+    return false;
+  }
+
+  const red = Number.parseFloat(components[0]);
+  const green = Number.parseFloat(components[1]);
+  const blue = Number.parseFloat(components[2]);
+
+  if ([red, green, blue].some((component) => !Number.isFinite(component))) {
+    return false;
+  }
+
+  const isBright = [red, green, blue].every((component) => component >= 250);
+  if (!isBright) {
+    return false;
+  }
+
+  if (components.length >= 4) {
+    const alpha = Number.parseFloat(components[3]);
+    if (Number.isFinite(alpha) && alpha <= 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function getRectFillColor(rect) {
+  if (!rect) {
+    return '';
+  }
+
+  const fillAttribute = normalizeSvgColor(rect.getAttribute('fill'));
+  if (fillAttribute) {
+    return fillAttribute;
+  }
+
+  const styleFill = extractSvgStyleProperty(rect, 'fill');
+  return normalizeSvgColor(styleFill);
+}
+
+function hasTransparentFill(rect) {
+  if (!rect) {
+    return false;
+  }
+
+  const fillOpacityAttribute = parseNumericAttribute(rect.getAttribute('fill-opacity'));
+  if (Number.isFinite(fillOpacityAttribute) && fillOpacityAttribute <= 0) {
+    return true;
+  }
+
+  const opacityAttribute = parseNumericAttribute(rect.getAttribute('opacity'));
+  if (Number.isFinite(opacityAttribute) && opacityAttribute <= 0) {
+    return true;
+  }
+
+  const styleFillOpacity = parseNumericAttribute(extractSvgStyleProperty(rect, 'fill-opacity'));
+  if (Number.isFinite(styleFillOpacity) && styleFillOpacity <= 0) {
+    return true;
+  }
+
+  const styleOpacity = parseNumericAttribute(extractSvgStyleProperty(rect, 'opacity'));
+  if (Number.isFinite(styleOpacity) && styleOpacity <= 0) {
+    return true;
+  }
+
+  return false;
+}
+
+function isBarcodeRectVisibleForPdf(rect) {
+  if (!rect) {
+    return false;
+  }
+
+  const className = normalizeSvgColor(rect.getAttribute('class'));
+  if (className && className.includes('background')) {
+    return false;
+  }
+
+  if (hasTransparentFill(rect)) {
+    return false;
+  }
+
+  const fill = getRectFillColor(rect);
+  if (!fill) {
+    return true;
+  }
+
+  if (isTransparentColor(fill)) {
+    return false;
+  }
+
+  if (isWhiteColor(fill)) {
+    return false;
+  }
+
+  return true;
+}
+
 function createBarcodeVectorDataForPdf(label, widthPx, heightPx) {
   if (!label || !label.barcodeValue) {
     return null;
@@ -1989,6 +2201,7 @@ function createBarcodeVectorDataForPdf(label, widthPx, heightPx) {
   }
 
   const rects = Array.from(svg.querySelectorAll('rect'))
+    .filter((rect) => isBarcodeRectVisibleForPdf(rect))
     .map((rect) => {
       const x = parseNumericAttribute(rect.getAttribute('x'));
       const y = parseNumericAttribute(rect.getAttribute('y'));
