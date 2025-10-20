@@ -24,8 +24,8 @@ const LABEL_GAP_OVERRIDE_PROPERTY = '--label-gap-override';
 const LABEL_LINE_GAP_OVERRIDE_PROPERTY = '--line-gap-override';
 const MIN_BARCODE_HEIGHT_PX = 8;
 const LINE_HEIGHT_RATIO = 1.2;
-const PDF_SPACE_WIDTH_ADJUST_THRESHOLD = 0.35;
-const PDF_SPACE_WIDTH_TARGET_RATIO = 0.18;
+const PDF_SPACE_WIDTH_ADJUST_THRESHOLD = 0.22;
+const PDF_SPACE_WIDTH_TARGET_RATIO = 0.12;
 
 const PDF_LIB_SOURCE_URL = 'vendor/pdf-lib.min.js';
 const PDF_FONTKIT_SOURCE_URL = 'vendor/fontkit.umd.min.js';
