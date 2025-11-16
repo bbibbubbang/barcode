@@ -1901,6 +1901,31 @@ function splitIntoLines(value) {
   return value.split(/\r?\n/);
 }
 
+function getTextBlockHeightPt({ lines, fontSizePx, lineHeightRatio = LINE_HEIGHT_RATIO }) {
+  const safeLines = Array.isArray(lines) && lines.length > 0 ? lines : [''];
+  const baseFontSizePx = Number(fontSizePx);
+  const safeFontSizePx = Number.isFinite(baseFontSizePx)
+    ? Math.max(baseFontSizePx, 1)
+    : 12;
+  const sizePt = pxToPt(safeFontSizePx);
+  const safeLineHeightRatio =
+    Number.isFinite(lineHeightRatio) && lineHeightRatio > 0
+      ? lineHeightRatio
+      : LINE_HEIGHT_RATIO;
+  const lineHeightPt = sizePt * safeLineHeightRatio;
+  const interLineGapPt = Math.max(lineHeightPt - sizePt, 0);
+  const lineCount = safeLines.length;
+
+  if (lineCount <= 0) {
+    return 0;
+  }
+
+  const totalLineHeight = sizePt * lineCount;
+  const totalGapHeight = lineCount > 1 ? interLineGapPt * (lineCount - 1) : 0;
+
+  return totalLineHeight + totalGapHeight;
+}
+
 function drawCenteredTextBlock({
   page,
   lines,
@@ -2384,19 +2409,9 @@ function createBarcodeVectorDataForPdf(label, widthPx, heightPx) {
   };
 }
 
-async function drawBarcodeBlock({
-  page,
-  label,
-  cursorY,
-  leftPaddingPt,
-  usableWidthPt,
-  fallbackFont,
-  color,
-}) {
-  const includeBarcode = Boolean(label.barcodeValue);
-
-  if (!includeBarcode) {
-    return cursorY;
+function computeBarcodeBlockMetrics({ label, usableWidthPt }) {
+  if (!label || !label.barcodeValue) {
+    return null;
   }
 
   const availableWidthMm = Math.max(Number(label.labelWidth) - LABEL_HORIZONTAL_PADDING_MM, 1);
@@ -2408,24 +2423,58 @@ async function drawBarcodeBlock({
   const vectorData = createBarcodeVectorDataForPdf(label, availableWidthPx, barcodeHeightPx);
 
   if (!vectorData) {
-    return drawCenteredTextBlock({
-      page,
-      lines: ['바코드 생성 오류'],
-      font: fallbackFont,
-      fontSizePx: 12,
-      color,
-      cursorY,
-      leftPaddingPt,
-      usableWidthPt,
-    });
+    return null;
+  }
+
+  const svgWidthPt = pxToPt(vectorData.width);
+  const svgHeightPt = pxToPt(vectorData.height);
+
+  if (
+    !Number.isFinite(svgWidthPt)
+    || !Number.isFinite(svgHeightPt)
+    || svgWidthPt <= 0
+    || svgHeightPt <= 0
+  ) {
+    return null;
   }
 
   const targetWidthPt = Math.max(usableWidthPt, 1);
   const targetHeightPt = pxToPt(barcodeHeightPx);
-  const svgWidthPt = pxToPt(vectorData.width);
-  const svgHeightPt = pxToPt(vectorData.height);
+  const widthScale = targetWidthPt / svgWidthPt;
+  const heightScale = targetHeightPt / svgHeightPt;
+  const scale = Math.min(widthScale, heightScale);
+  const drawHeight = svgHeightPt * scale;
 
-  if (svgWidthPt <= 0 || svgHeightPt <= 0) {
+  return {
+    vectorData,
+    scale,
+    drawHeight,
+  };
+}
+
+async function drawBarcodeBlock({
+  page,
+  label,
+  cursorY,
+  leftPaddingPt,
+  usableWidthPt,
+  fallbackFont,
+  color,
+  barcodeMetrics = null,
+}) {
+  const includeBarcode = Boolean(label.barcodeValue);
+
+  if (!includeBarcode) {
+    return cursorY;
+  }
+
+  let metrics = barcodeMetrics;
+
+  if (!metrics) {
+    metrics = computeBarcodeBlockMetrics({ label, usableWidthPt });
+  }
+
+  if (!metrics || !metrics.vectorData || !Number.isFinite(metrics.scale)) {
     return drawCenteredTextBlock({
       page,
       lines: ['바코드 생성 오류'],
@@ -2438,9 +2487,28 @@ async function drawBarcodeBlock({
     });
   }
 
-  const widthScale = targetWidthPt / svgWidthPt;
-  const heightScale = targetHeightPt / svgHeightPt;
-  const scale = Math.min(widthScale, heightScale);
+  const { vectorData, scale } = metrics;
+  const svgWidthPt = pxToPt(vectorData.width);
+  const svgHeightPt = pxToPt(vectorData.height);
+
+  if (
+    !Number.isFinite(svgWidthPt)
+    || !Number.isFinite(svgHeightPt)
+    || svgWidthPt <= 0
+    || svgHeightPt <= 0
+  ) {
+    return drawCenteredTextBlock({
+      page,
+      lines: ['바코드 생성 오류'],
+      font: fallbackFont,
+      fontSizePx: 12,
+      color,
+      cursorY,
+      leftPaddingPt,
+      usableWidthPt,
+    });
+  }
+
   const drawWidth = svgWidthPt * scale;
   const drawHeight = svgHeightPt * scale;
   const drawX = leftPaddingPt + Math.max((usableWidthPt - drawWidth) / 2, 0);
@@ -2550,6 +2618,7 @@ async function generateLabelsPdfBlob(labels) {
     const horizontalPaddingPt = mmToPt(LABEL_HORIZONTAL_PADDING_MM / 2);
     const gapPt = mmToPt(LABEL_GAP_MM);
     const usableWidthPt = Math.max(pageWidthPt - horizontalPaddingPt * 2, 1);
+    const usableHeightPt = Math.max(pageHeightPt - verticalPaddingPt * 2, 0);
 
     let cursorY = pageHeightPt - verticalPaddingPt;
 
@@ -2606,8 +2675,61 @@ async function generateLabelsPdfBlob(labels) {
       });
     }
 
-    for (let index = 0; index < blocks.length; index += 1) {
-      const block = blocks[index];
+    const renderBlocks = blocks
+      .map((block) => {
+        if (!block) {
+          return null;
+        }
+
+        if (block.type === 'text') {
+          return {
+            ...block,
+            heightPt: getTextBlockHeightPt({
+              lines: block.lines,
+              fontSizePx: block.fontSizePx,
+              lineHeightRatio: block.lineHeightRatio,
+            }),
+          };
+        }
+
+        if (block.type === 'barcode') {
+          const barcodeMetrics = computeBarcodeBlockMetrics({
+            label,
+            usableWidthPt,
+          });
+          return {
+            ...block,
+            barcodeMetrics,
+            heightPt: barcodeMetrics?.drawHeight || 0,
+          };
+        }
+
+        return block;
+      })
+      .filter(Boolean);
+
+    const totalBlockHeightPt = renderBlocks.reduce(
+      (sum, block) => sum + (block.heightPt || 0),
+      0,
+    );
+    const totalGapPt = renderBlocks.reduce((sum, block, index) => {
+      if (index >= renderBlocks.length - 1) {
+        return sum;
+      }
+      const gapValuePt = Number.isFinite(block.afterGapOverride)
+        ? block.afterGapOverride
+        : gapPt;
+      return sum + gapValuePt;
+    }, 0);
+    const leadingSpacePt = Math.max(
+      (usableHeightPt - totalBlockHeightPt - totalGapPt) / 2,
+      0,
+    );
+
+    cursorY = pageHeightPt - verticalPaddingPt - leadingSpacePt;
+
+    for (let index = 0; index < renderBlocks.length; index += 1) {
+      const block = renderBlocks[index];
 
       if (!block) {
         // eslint-disable-next-line no-continue
@@ -2635,10 +2757,11 @@ async function generateLabelsPdfBlob(labels) {
           usableWidthPt,
           fallbackFont: fontBold,
           color: colors.dark,
+          barcodeMetrics: block.barcodeMetrics,
         });
       }
 
-      if (index < blocks.length - 1) {
+      if (index < renderBlocks.length - 1) {
         const gapValuePt = Number.isFinite(block.afterGapOverride)
           ? block.afterGapOverride
           : gapPt;
