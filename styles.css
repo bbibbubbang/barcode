@@ -105,6 +105,12 @@ form {
   font-size: 0.9rem;
 }
 
+.form-subcontrol-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .form-subcontrol label {
   font-weight: 500;
 }

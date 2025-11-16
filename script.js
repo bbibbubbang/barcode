@@ -306,7 +306,11 @@ function getFormValues() {
     barcodeValue: (formData.get('barcodeValue') || '').trim(),
     barcodeType: formData.get('barcodeType') || 'code128',
     productFontSize: Number(formData.get('productFontSize')),
+    productLetterSpacing: Number(formData.get('productLetterSpacing')),
+    productLineHeight: Number(formData.get('productLineHeight')),
     subProductFontSize: Number(formData.get('subProductFontSize')),
+    subProductLetterSpacing: Number(formData.get('subProductLetterSpacing')),
+    subProductLineHeight: Number(formData.get('subProductLineHeight')),
     barcodeFontSize: Number(formData.get('barcodeFontSize')),
     labelWidth: Number(formData.get('labelWidth')),
     labelHeight: Number(formData.get('labelHeight')),
@@ -315,7 +319,7 @@ function getFormValues() {
   };
 }
 
-function normalizeNumber(value, { min, max, fallback }) {
+function normalizeNumber(value, { min, max, fallback, round }) {
   if (!Number.isFinite(value)) return fallback;
 
   let nextValue = value;
@@ -326,7 +330,9 @@ function normalizeNumber(value, { min, max, fallback }) {
     nextValue = Math.min(nextValue, max);
   }
 
-  if (Number.isInteger(fallback)) {
+  const shouldRound = typeof round === 'boolean' ? round : Number.isInteger(fallback);
+
+  if (shouldRound) {
     nextValue = Math.round(nextValue);
   }
 
@@ -336,8 +342,16 @@ function normalizeNumber(value, { min, max, fallback }) {
 function getDefaults() {
   return {
     productFontSize: Number(form.elements.productFontSize?.defaultValue) || 16,
+    productLetterSpacing:
+      Number(form.elements.productLetterSpacing?.defaultValue) || 0,
+    productLineHeight:
+      Number(form.elements.productLineHeight?.defaultValue) || LINE_HEIGHT_RATIO,
     subProductFontSize:
       Number(form.elements.subProductFontSize?.defaultValue) || 14,
+    subProductLetterSpacing:
+      Number(form.elements.subProductLetterSpacing?.defaultValue) || 0,
+    subProductLineHeight:
+      Number(form.elements.subProductLineHeight?.defaultValue) || LINE_HEIGHT_RATIO,
     barcodeFontSize: Number(form.elements.barcodeFontSize?.defaultValue) || 12,
     labelWidth: Number(form.elements.labelWidth?.defaultValue) || 60,
     labelHeight: Number(form.elements.labelHeight?.defaultValue) || 40,
@@ -354,10 +368,34 @@ function withFallbacks(values) {
       max: 36,
       fallback: defaults.productFontSize,
     }),
+    productLetterSpacing: normalizeNumber(values.productLetterSpacing, {
+      min: -5,
+      max: 10,
+      fallback: defaults.productLetterSpacing,
+      round: false,
+    }),
+    productLineHeight: normalizeNumber(values.productLineHeight, {
+      min: 0.8,
+      max: 3,
+      fallback: defaults.productLineHeight,
+      round: false,
+    }),
     subProductFontSize: normalizeNumber(values.subProductFontSize, {
       min: 8,
       max: 32,
       fallback: defaults.subProductFontSize,
+    }),
+    subProductLetterSpacing: normalizeNumber(values.subProductLetterSpacing, {
+      min: -5,
+      max: 10,
+      fallback: defaults.subProductLetterSpacing,
+      round: false,
+    }),
+    subProductLineHeight: normalizeNumber(values.subProductLineHeight, {
+      min: 0.8,
+      max: 3,
+      fallback: defaults.subProductLineHeight,
+      round: false,
     }),
     barcodeFontSize: normalizeNumber(values.barcodeFontSize, {
       min: 8,
@@ -418,10 +456,34 @@ function extractPreferences(values) {
       max: 36,
       fallback: defaults.productFontSize,
     }),
+    productLetterSpacing: normalizeNumber(Number(values.productLetterSpacing), {
+      min: -5,
+      max: 10,
+      fallback: defaults.productLetterSpacing,
+      round: false,
+    }),
+    productLineHeight: normalizeNumber(Number(values.productLineHeight), {
+      min: 0.8,
+      max: 3,
+      fallback: defaults.productLineHeight,
+      round: false,
+    }),
     subProductFontSize: normalizeNumber(Number(values.subProductFontSize), {
       min: 8,
       max: 32,
       fallback: defaults.subProductFontSize,
+    }),
+    subProductLetterSpacing: normalizeNumber(Number(values.subProductLetterSpacing), {
+      min: -5,
+      max: 10,
+      fallback: defaults.subProductLetterSpacing,
+      round: false,
+    }),
+    subProductLineHeight: normalizeNumber(Number(values.subProductLineHeight), {
+      min: 0.8,
+      max: 3,
+      fallback: defaults.subProductLineHeight,
+      round: false,
     }),
     barcodeFontSize: normalizeNumber(Number(values.barcodeFontSize), {
       min: 8,
@@ -504,8 +566,24 @@ function applyFormValues(values) {
     elements.productFontSize.value = values.productFontSize;
   }
 
+  if (Number.isFinite(values.productLetterSpacing)) {
+    elements.productLetterSpacing.value = values.productLetterSpacing;
+  }
+
+  if (Number.isFinite(values.productLineHeight)) {
+    elements.productLineHeight.value = values.productLineHeight;
+  }
+
   if (Number.isFinite(values.subProductFontSize)) {
     elements.subProductFontSize.value = values.subProductFontSize;
+  }
+
+  if (Number.isFinite(values.subProductLetterSpacing)) {
+    elements.subProductLetterSpacing.value = values.subProductLetterSpacing;
+  }
+
+  if (Number.isFinite(values.subProductLineHeight)) {
+    elements.subProductLineHeight.value = values.subProductLineHeight;
   }
 
   if (Number.isFinite(values.barcodeFontSize)) {
@@ -551,7 +629,11 @@ function restoreLabels() {
             showText: item.showText !== false,
             includeName: item.includeName !== false,
             productFontSize: Number(item.productFontSize),
+            productLetterSpacing: Number(item.productLetterSpacing),
+            productLineHeight: Number(item.productLineHeight),
             subProductFontSize: Number(item.subProductFontSize),
+            subProductLetterSpacing: Number(item.subProductLetterSpacing),
+            subProductLineHeight: Number(item.subProductLineHeight),
             barcodeFontSize: Number(item.barcodeFontSize),
             labelWidth: Number(item.labelWidth),
             labelHeight: Number(item.labelHeight),
@@ -712,7 +794,11 @@ function startEditingLabel(id) {
     barcodeValue: sanitized.barcodeValue,
     barcodeType: sanitized.barcodeType,
     productFontSize: sanitized.productFontSize,
+    productLetterSpacing: sanitized.productLetterSpacing,
+    productLineHeight: sanitized.productLineHeight,
     subProductFontSize: sanitized.subProductFontSize,
+    subProductLetterSpacing: sanitized.subProductLetterSpacing,
+    subProductLineHeight: sanitized.subProductLineHeight,
     barcodeFontSize: sanitized.barcodeFontSize,
     labelWidth: sanitized.labelWidth,
     labelHeight: sanitized.labelHeight,
@@ -759,8 +845,8 @@ function handleFormSubmit(event) {
 
   persistPreferences(formValues);
 
-  if (!formValues.productName || !formValues.barcodeValue) {
-    alert('상품명과 바코드 값은 필수 입력 항목입니다.');
+  if (!formValues.productName) {
+    alert('상품명은 필수 입력 항목입니다.');
     return;
   }
 
@@ -863,7 +949,11 @@ function areLabelsEqual(a, b) {
     'barcodeValue',
     'barcodeType',
     'productFontSize',
+    'productLetterSpacing',
+    'productLineHeight',
     'subProductFontSize',
+    'subProductLetterSpacing',
+    'subProductLineHeight',
     'barcodeFontSize',
     'labelWidth',
     'labelHeight',
@@ -1292,6 +1382,22 @@ function adjustBarcodeHeightsForElements(elements, labels) {
   }
 }
 
+function computeProductToSubGapPx(label) {
+  if (!label || !label.subProductName) {
+    return 0;
+  }
+
+  const lineHeight = Number(label.productLineHeight);
+  const fontSize = Number(label.productFontSize);
+
+  if (!Number.isFinite(lineHeight) || !Number.isFinite(fontSize)) {
+    return 0;
+  }
+
+  const gap = (lineHeight - 1) * fontSize;
+  return Number.isFinite(gap) ? gap : 0;
+}
+
 function createPreviewLabel(label) {
   const element = document.createElement('div');
   element.className = 'preview-label';
@@ -1304,36 +1410,56 @@ function createPreviewLabel(label) {
     name.className = 'preview-label__name';
     name.style.fontSize = `${label.productFontSize}px`;
     name.textContent = label.productName;
+    if (Number.isFinite(label.productLetterSpacing)) {
+      name.style.letterSpacing = `${label.productLetterSpacing}px`;
+    }
+    if (Number.isFinite(label.productLineHeight) && label.productLineHeight > 0) {
+      name.style.lineHeight = `${label.productLineHeight}`;
+    }
     element.appendChild(name);
 
     if (label.subProductName) {
+      const gapPx = computeProductToSubGapPx(label);
+      if (Number.isFinite(gapPx)) {
+        name.style.marginBottom = `${gapPx}px`;
+      }
+
       const subName = document.createElement('div');
       subName.className = 'preview-label__subname';
       subName.style.fontSize = `${label.subProductFontSize}px`;
       subName.textContent = label.subProductName;
+      if (Number.isFinite(label.subProductLetterSpacing)) {
+        subName.style.letterSpacing = `${label.subProductLetterSpacing}px`;
+      }
+      if (
+        Number.isFinite(label.subProductLineHeight)
+        && label.subProductLineHeight > 0
+      ) {
+        subName.style.lineHeight = `${label.subProductLineHeight}`;
+      }
       element.appendChild(subName);
     }
   }
 
-  const barcodeWrapper = document.createElement('div');
-  barcodeWrapper.className = 'preview-label__barcode';
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  barcodeWrapper.appendChild(svg);
-  element.appendChild(barcodeWrapper);
-
+  let barcodeWrapper = null;
+  let svg = null;
   const hasBarcodeValue = Boolean(label.barcodeValue);
 
   if (hasBarcodeValue) {
+    barcodeWrapper = document.createElement('div');
+    barcodeWrapper.className = 'preview-label__barcode';
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    barcodeWrapper.appendChild(svg);
+    element.appendChild(barcodeWrapper);
+
     const rendered = renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label));
 
     if (!rendered) {
       barcodeWrapper.innerHTML = `<p class="label-preview__empty">바코드 스크립트를 불러오지 못했습니다.<br />인터넷 연결을 확인하거나 새로고침 후 다시 시도해주세요.</p>`;
     }
-  } else {
-    barcodeWrapper.innerHTML = '';
   }
 
-  if (label.showText && hasBarcodeValue) {
+  if (label.showText && hasBarcodeValue && barcodeWrapper) {
     const barcodeText = document.createElement('div');
     barcodeText.className = 'preview-label__barcode-text';
     barcodeText.style.fontSize = `${label.barcodeFontSize}px`;
@@ -1538,27 +1664,49 @@ function buildPrintSheet(labels) {
       name.className = 'print-label__name';
       name.style.fontSize = `${label.productFontSize}px`;
       name.textContent = label.productName;
+      if (Number.isFinite(label.productLetterSpacing)) {
+        name.style.letterSpacing = `${label.productLetterSpacing}px`;
+      }
+      if (Number.isFinite(label.productLineHeight) && label.productLineHeight > 0) {
+        name.style.lineHeight = `${label.productLineHeight}`;
+      }
       item.appendChild(name);
 
       if (label.subProductName) {
+        const gapPx = computeProductToSubGapPx(label);
+        if (Number.isFinite(gapPx)) {
+          name.style.marginBottom = `${gapPx}px`;
+        }
+
         const subName = document.createElement('div');
         subName.className = 'print-label__subname';
         subName.style.fontSize = `${label.subProductFontSize}px`;
         subName.textContent = label.subProductName;
+        if (Number.isFinite(label.subProductLetterSpacing)) {
+          subName.style.letterSpacing = `${label.subProductLetterSpacing}px`;
+        }
+        if (
+          Number.isFinite(label.subProductLineHeight)
+          && label.subProductLineHeight > 0
+        ) {
+          subName.style.lineHeight = `${label.subProductLineHeight}`;
+        }
         item.appendChild(subName);
       }
     }
 
-    const barcodeWrapper = document.createElement('div');
-    barcodeWrapper.className = 'print-label__barcode';
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    barcodeWrapper.appendChild(svg);
-    item.appendChild(barcodeWrapper);
+    if (label.barcodeValue) {
+      const barcodeWrapper = document.createElement('div');
+      barcodeWrapper.className = 'print-label__barcode';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      barcodeWrapper.appendChild(svg);
+      item.appendChild(barcodeWrapper);
 
-    const rendered = renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label));
+      const rendered = renderBarcode(svg, label.barcodeValue, getBarcodeRenderOptions(label));
 
-    if (!rendered) {
-      barcodeWrapper.innerHTML = '<p>바코드 생성 오류</p>';
+      if (!rendered) {
+        barcodeWrapper.innerHTML = '<p>바코드 생성 오류</p>';
+      }
     }
 
     if (label.showText && label.barcodeValue) {
@@ -1762,6 +1910,7 @@ function drawCenteredTextBlock({
   cursorY,
   leftPaddingPt,
   usableWidthPt,
+  lineHeightRatio = LINE_HEIGHT_RATIO,
 }) {
   const safeLines = Array.isArray(lines) && lines.length > 0 ? lines : [''];
   const baseFontSizePx = Number(fontSizePx);
@@ -1769,7 +1918,12 @@ function drawCenteredTextBlock({
     ? Math.max(baseFontSizePx, 1)
     : 12;
   const sizePt = pxToPt(safeFontSizePx);
-  const lineHeightPt = sizePt * LINE_HEIGHT_RATIO;
+  const safeLineHeightRatio =
+    Number.isFinite(lineHeightRatio) && lineHeightRatio > 0
+      ? lineHeightRatio
+      : LINE_HEIGHT_RATIO;
+  const lineHeightPt = sizePt * safeLineHeightRatio;
+  const interLineGapPt = Math.max(lineHeightPt - sizePt, 0);
   let nextCursorY = cursorY;
 
   safeLines.forEach((line, index) => {
@@ -1794,7 +1948,7 @@ function drawCenteredTextBlock({
     });
 
     if (index < safeLines.length - 1) {
-      nextCursorY -= lineHeightPt - sizePt;
+      nextCursorY -= interLineGapPt;
     }
   });
 
@@ -2242,16 +2396,7 @@ async function drawBarcodeBlock({
   const includeBarcode = Boolean(label.barcodeValue);
 
   if (!includeBarcode) {
-    return drawCenteredTextBlock({
-      page,
-      lines: ['바코드 생성 오류'],
-      font: fallbackFont,
-      fontSizePx: 12,
-      color,
-      cursorY,
-      leftPaddingPt,
-      usableWidthPt,
-    });
+    return cursorY;
   }
 
   const availableWidthMm = Math.max(Number(label.labelWidth) - LABEL_HORIZONTAL_PADDING_MM, 1);
@@ -2412,12 +2557,24 @@ async function generateLabelsPdfBlob(labels) {
 
     if (label.includeName) {
       const productLines = splitIntoLines(label.productName);
+      let productGapOverride = null;
+      if (label.subProductName) {
+        const gapPx = computeProductToSubGapPx(label);
+        if (Number.isFinite(gapPx)) {
+          const totalGapPt = Math.max(gapPt + pxToPt(gapPx), 0);
+          productGapOverride = totalGapPt;
+        }
+      }
       blocks.push({
         type: 'text',
         lines: productLines,
         font: fontBold,
         fontSizePx: Number(label.productFontSize) || 16,
         color: colors.dark,
+        lineHeightRatio: Number.isFinite(label.productLineHeight)
+          ? label.productLineHeight
+          : LINE_HEIGHT_RATIO,
+        afterGapOverride: productGapOverride,
       });
 
       if (label.subProductName) {
@@ -2428,11 +2585,16 @@ async function generateLabelsPdfBlob(labels) {
           font: fontRegular,
           fontSizePx: Number(label.subProductFontSize) || 14,
           color: colors.black,
+          lineHeightRatio: Number.isFinite(label.subProductLineHeight)
+            ? label.subProductLineHeight
+            : LINE_HEIGHT_RATIO,
         });
       }
     }
 
-    blocks.push({ type: 'barcode' });
+    if (label.barcodeValue) {
+      blocks.push({ type: 'barcode' });
+    }
 
     if (label.showText && label.barcodeValue) {
       blocks.push({
@@ -2462,6 +2624,7 @@ async function generateLabelsPdfBlob(labels) {
           cursorY,
           leftPaddingPt: horizontalPaddingPt,
           usableWidthPt,
+          lineHeightRatio: block.lineHeightRatio,
         });
       } else if (block.type === 'barcode') {
         cursorY = await drawBarcodeBlock({
@@ -2476,7 +2639,10 @@ async function generateLabelsPdfBlob(labels) {
       }
 
       if (index < blocks.length - 1) {
-        cursorY -= gapPt;
+        const gapValuePt = Number.isFinite(block.afterGapOverride)
+          ? block.afterGapOverride
+          : gapPt;
+        cursorY -= gapValuePt;
       }
     }
   }
